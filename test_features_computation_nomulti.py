@@ -11,15 +11,9 @@ from sensum.features import *
 
 # Parameters to set ########################################################################################################
 
-#path = '/Users/daniele/Documents/Sensum/Izmir/HR/seg_opt/'    #path of the folder containing the input files
-#path = '/Users/daniele/Documents/Sensum/Izmir/HR/Applications/Features/'
-path = 'F:\\Sensum_xp\\Izmir\\building_extraction_sup\\'
+path = '/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup/'
 input_file = 'pansharp.TIF'    #name of the input file
-#input_file = 'Izmir_multi.TIF'
-#input_file = 'LT51800331984164XXX04_city_adj.TIF'
 segmentation_file = 'Buildings8_watershed_v6.TIF'    #name of the raster file containing segmentation results
-#segmentation_file = 'watershed_0.2_new.tif'
-#segmentation_vector_file = 'watershed_0.2_new.shp'   #name of the shapefile containing segmentation results
 segmentation_vector_file = 'Buildings8_watershed_v6.shp'
 output_type = 'table'    #type of the produced output (table for vector, segment for raster); default is table
 output_vector_file = 'Buildings8_watershed_v6_features.shp' #name of the output shapefile

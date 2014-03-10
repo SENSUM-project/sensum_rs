@@ -23,12 +23,10 @@ This procedure has been selected in order to facilitate the user.
 ################# Parameters to set #################
 
 ##Fundamental
-#sat_folder = 'C:\\workspace\\Sensum\\Izmir\\MR\\'   ##path of the folder containing satellite images
-#shapefile = 'C:\\workspace\\Sensum\\Izmir\\MR\\sensum_TK_utm.shp' #path of the shapefile
-sat_folder = 'F:\\Sensum_xp\\Izmir\\MR_3\\'   ##path of the folder containing satellite images
-shapefile_path = 'F:\\Sensum_xp\\Izmir\\MR_3\\sensum_TK_utm.shp' #path of the shapefile
+sat_folder = '/home/marc/eclipse_data/sensum_testdata/Izmir/MR_3/'   ##path of the folder containing satellite images
+shapefile_path = '/home/marc/eclipse_data/sensum_testdata/Izmir/MR_3/sensum_TK_utm.shp' #path of the shapefile
 quantization_mode = 'kmeans' #'linear' or 'kmeans'
-opt_polygon = 'F:\\Sensum_xp\\Izmir\\MR_2\\opt_polygon.shp'
+opt_polygon = '/home/marc/eclipse_data/sensum_testdata/Izmir/MR_2/opt_polygon.shp'
 segmentation_name = 'Edison' #or 'Meanshift'
 select_criteria = 4
 nloops = 3

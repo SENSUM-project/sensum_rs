@@ -37,7 +37,7 @@ License: This program is free software; you can redistribute it and/or modify
 
 #unzip folders
 
-#import images
+#import images from GeoTiff or PostGIS Raster
 
 #resample thermal bands (not for Landsat MSS, Quickbird, WorldView-2, Ikonos)
 

@@ -10,9 +10,9 @@ from sensum.misc import split_shape
 import osgeo.ogr
 
 ## Parameters ##########################################################################
-input_image = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\pansharp.TIF" #original image
-input_shape = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\reference_polygon_2.shp" #reference polygon
-path = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\"
+input_image = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/pansharp.TIF" #original image
+input_shape = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/reference_polygon_2.shp" #reference polygon
+path = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/"
 
 segmentation_name = 'Meanshift'
 nloops = 10

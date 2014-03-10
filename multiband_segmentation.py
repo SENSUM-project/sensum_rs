@@ -10,15 +10,15 @@ import time
 ### Parameters #########################################################################################
 #input_image = 'C:\workspace\Sensum\Izmir\Applications\multiband_segmentation\\clipped_merged_new.tif'
 
-input_image = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\pansharp.TIF"
-Folder_output = 'F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\'
+input_image = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/pansharp.TIF"
+Folder_output = '/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/'
 
 '''
 input_image = 'F:\\Sensum_xp\\Izmir\\MR\\1984-06-12\\LT51800331984164XXX04_B1_city.TIF'
 Folder_output = 'F:\\Sensum_xp\\Izmir\\Reference_layer\\'
 '''
-temp_Folder = 'F:\Sensum_xp\Izmir\Applications\\tmpfolder'
-exe_folder = 'F:\Sensum_xp\Izmir\Applications\seg_exec'
+temp_Folder = '/home/marc/eclipse_data/sensum_testdata/Izmir/Applications/tmpfolder'
+exe_folder = '/home/marc/eclipse_data/sensum_testdata/Izmir/Applications/seg_exec'
 ########################################################################################################
 
 osgeo.gdal.AllRegister()
