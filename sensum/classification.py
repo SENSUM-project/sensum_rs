@@ -1,18 +1,15 @@
 '''
----------------------------------------------------------------------------------
-                                classification.py
+.. module:: classification
+   :platform: Unix, Windows
+   :synopsis: This module includes functions related to the high-level classification of multi-spectral satellite images.
+
+.. moduleauthor:: Mostapha Harb <name@mail.com>
+.. moduleauthor:: Daniele De Vecchi <name@mail.com>
+'''
+'''
 ---------------------------------------------------------------------------------
 Created on May 13, 2013
 Last modified on Mar 09, 2014
-
-Author(s): Mostapha Harb - Daniele De Vecchi 
-           University of Pavia - Remote Sensing Laboratory / EUCENTRE Foundation
-
-Contact: daniele.devecchi03@universitadipavia.it
-         mostapha.harb@eucentre.it
-
-Description: This module includes functions related to the high-level 
-             classification of multi-spectral satellite images.
 
 ---------------------------------------------------------------------------------
 Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
@@ -47,22 +44,17 @@ else:
 
 def unsupervised_classification(input_file,output_file,n_classes,n_iterations):
     
-    '''
-    ###################################################################################################################
-    Unsupervised K-Means classification using OTB library
+    '''Unsupervised K-Means classification using OTB library.
     
-    Author: Daniele De Vecchi
+    :param input_file: The input file (str).
+    :param output_file: The output file (str).
+    :param n_classes: The number of classes (int).
+    :param n_iterations: The number of iterations (int).
+    :returns:  Output image is created containing results from the classification.
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - 
     Last modified: 13.05.2013
-     
-    Input:
-     - input_file: path and name of the input image
-     - output_file: path and name of the output image
-     - n_classes: number of classes to extract
-     - n_iterations: maximum number of iterations for the classification
-    
-    Output:
-     Output image is created containing results from the classification
-    ###################################################################################################################
     ''' 
     
     #TODO: especially for classifications it would be crucial to have a nd array as input. this way we can easily compile the multidimensional feature space for the calssification without writing to file which is rather unflexible.
@@ -84,24 +76,19 @@ def unsupervised_classification(input_file,output_file,n_classes,n_iterations):
 
 def supervised_classification(classification_type,path,input_file,segmentation_file,output_file,training_field):
     
-    '''
-    ###################################################################################################################
-    Supervised classification using OTB library
+    '''Supervised classification using OTB library.
     
-    Author: Daniele De Vecchi
+    :param classification_type: String containing the chosen algorithm ('libsvm','svm','dt','gbt','bayes','rf','knn').
+    :param path: Path to the considered folder (str).
+    :param input_file: Name of the input file (str).
+    :param segmentation_file: Name of the shapefile result of the segmentation and with training classes already defined: The number of iterations (str).
+    :param output_file: Name of the output image (str).
+    :param training_field: Name of the field containing the defined class for each segment (str).
+    :returns:  Output image is created containing results from the classification.
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - 
     Last modified: 13.05.2013
-     
-    Input:
-     - classification_type: string containing the chosen algorithm ('libsvm','svm','dt','gbt','bayes','rf','knn')
-     - path: path to the considered folder
-     - input_file: name of the input image
-     - segmentation_file: name of the shapefile result of the segmentation and with training classes already defined
-     - output_file: name of the output image
-     - training_field: name of the field containing the defined class for each segment
-    
-    Output:
-     Output image is created containing results from the classification
-    ###################################################################################################################
     ''' 
     
     #TODO: Need clarification concerning the training data input.
