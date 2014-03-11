@@ -1,5 +1,5 @@
 '''
-.. module:: classification
+.. module:: classification1
    :platform: Unix, Windows
    :synopsis: This module includes functions related to the high-level classification of multi-spectral satellite images.
 
