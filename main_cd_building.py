@@ -1,6 +1,6 @@
 '''
 ---------------------------------------------------------------------------------
-                                main_prep.py
+                                main_cd_building.py
 ---------------------------------------------------------------------------------
 Created on Mar 09, 2014
 Last modified on Mar 09, 2014
@@ -11,13 +11,13 @@ Author(s): Mostapha Harb - Daniele De Vecchi
 Contact: daniele.devecchi03@universitadipavia.it
          mostapha.harb@eucentre.it
 
-Description: main file for the image preprocessing workflow
+Description: main file for the building change detection workflow
 
-             supported images: Ikonos, Quickbird, WorldView-2, Landsat MSS, TM, OLI
-             supported steps: unzip, resample, stack, radiom cal, atcor, pansharpen, 
-                              coregister, clip, mosaic, tile  
-             input: raw, zipped multi-spectral satellite images
-             output: preprocessed images (GeoTiff or PostGIS Raster)
+             supported images: Ikonos, Quickbird, WorldView-2
+             description: GIS-object-based change detection for abrupt changes.
+             supported steps: normalization, roughness and edge-enhancement
+             input: vector polygons with building footprints pre event, pre image, post image (coregistration needed!) 
+             output: change index for each building (0-1) + optionally stats (building area with damage index)
 
 ---------------------------------------------------------------------------------
 Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
@@ -35,26 +35,26 @@ License: This program is free software; you can redistribute it and/or modify
 ---------------------------------------------------------------------------------
 '''
 
-#unzip folders
 
-#import images from GeoTiff or PostGIS Raster
+#procedure branch 1:
+    #clip images using building shape -> gdal.cliprasterbymask
 
-#resample thermal bands (not for Landsat MSS, Quickbird, WorldView-2, Ikonos)
+    #normalization -> saga.slopebasedindex
 
-#create layerstack
+    #roughness index -> gdal.roughness 
 
-#(radiometric calibration (dn to top-of-atmosphere radiance))
+    #output1
 
-#(atmospheric correction)
+#procedure branch 2:
+    #2+2 buffer and 2-2 buffer around buildings -> qgis.buffer (ogr)
 
-#pansharpening (not for Landsat MSS and TM)
+    #subtract -2 buffer from +2 buffer
 
-#coregistration (only if more than one input image)
+    #edge detection -> otb.edgedetection
 
-#clipping to user-defined extent (shp input required)
+    #normalization pre-post after edge detection -> saga.slopebasedindex
 
-#mosaicing (only if more than one input image)
+    #output 2
 
-#(tiling)
-
-#export result to GeoTIFF or PostGIS Raster
+#bringing together output 1 and output 2 
+    #to be finished: create index
