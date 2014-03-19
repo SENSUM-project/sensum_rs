@@ -1,19 +1,17 @@
 '''
+.. module:: preprocess
+   :platform: Unix, Windows
+   :synopsis: This module includes functions related to preprocessing of multi-spectral satellite images.
+
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+'''
+'''
 ---------------------------------------------------------------------------------
                                 preprocess.py
 ---------------------------------------------------------------------------------
 Created on May 13, 2013
-Last modified on Mar 09, 2014
-
-Author(s): Mostapha Harb - Daniele De Vecchi 
-           University of Pavia - Remote Sensing Laboratory / EUCENTRE Foundation
-
-Contact: daniele.devecchi03@universitadipavia.it
-         mostapha.harb@eucentre.it
-
-Description: This module includes functions related to the preprocessing of 
-             multi-spectral satellite images.
-
+Last modified on Mar 19, 2014
 ---------------------------------------------------------------------------------
 Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
          vUlnerability and recovery Monitoring (SENSUM)
@@ -38,52 +36,47 @@ import cv2
 import numpy as np
 import osgeo.ogr
 import otbApplication
-from sensum.conversion import world2Pixel, Read_Image_Parameters
+from sensum.conversion import *
 
-if os.name == 'posix':
+if os.name == 'posix': 
     separator = '/'
 else:
     separator = '\\'
 
 
-def clip(path,name,shapefile,input_type):
+def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     
-    '''
-    ###################################################################################################################
-    Clip an image using a shapefile
+    '''Clip a raster with a rectangular shape based on the provided polygon
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-     
-    Input:
-     - path: path to the images location in your pc
-     - name: name of the input file
-     - shapefile: path of the shapefile to be used
-     - input_type: datatype of the input
-     
-    Output:
-     New file is saved into the same folder as "original_name_city.TIF"
-    ###################################################################################################################  
-    '''
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
+    :param input_shape: path and name of the input shapefile (*.shp) (string)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :returns:  an output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    ''' 
+
     #TODO: Why not use gdalwarp?
     #TODO: would use only one argument to define input image and one to define input shp.
         
     #os.system('gdalwarp -q -cutline ' + shapefile + ' -crop_to_cutline -of GTiff ' + path + name +' '+ path + name[:-4] + '_city.TIF')
     #new command working on fwtools, used just / for every file
-    #print 'Clipped file: ' + name[:-4] + '_city.TIF'
     x_list = []
     y_list = []
     # get the shapefile driver
     driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
     # open the data source
-    datasource = driver.Open(shapefile, 0)
+    datasource = driver.Open(input_shape, 0)
     if datasource is None:
         print 'Could not open shapefile'
         sys.exit(1)
 
     layer = datasource.GetLayer() #get the shapefile layer
     
-    inb = osgeo.gdal.Open(path+name, GA_ReadOnly)
+    inb = osgeo.gdal.Open(input_raster, GA_ReadOnly)
     if inb is None:
         print 'Could not open'
         sys.exit(1)
@@ -99,12 +92,11 @@ def clip(path,name,shapefile,input_type):
     while feature:
         # get the x,y coordinates for the point
         geom = feature.GetGeometryRef()
-        #print geom
         ring = geom.GetGeometryRef(0)
         n_vertex = ring.GetPointCount()
         for i in range(0,n_vertex-1):
             lon,lat,z = ring.GetPoint(i)
-            x_matrix,y_matrix = world2Pixel(geoMatrix,lon,lat)
+            x_matrix,y_matrix = world2pixel(geoMatrix,lon,lat)
             x_list.append(x_matrix)
             y_list.append(y_matrix)
         # destroy the feature and get a new one
@@ -123,135 +115,89 @@ def clip(path,name,shapefile,input_type):
     #compute the new starting coordinates
     lon_min = float(x_min*geoMatrix[1]+geoMatrix[0]) 
     lat_min = float(geoMatrix[3]+y_min*geoMatrix[5])
-    #print lon_min
-    #print lat_min
-    
+
     geotransform = [lon_min,geoMatrix[1],0.0,lat_min,0.0,geoMatrix[5]]
-    #print x_min,x_max
-    #print y_min,y_max
-    #out=data[int(y_min):int(y_max),int(x_min):int(x_max)]
+
     cols_out = x_max-x_min
     rows_out = y_max-y_min
-    output=driver.Create(path+name[:-4]+'_city.TIF',cols_out,rows_out,nbands,GDT_Float32)
-    inprj=inb.GetProjection()
+    
+    gdal_data_type = data_type2gdal_data_type(data_type)
+    output=driver.Create(output_raster,cols_out,rows_out,nbands,gdal_data_type) #to check
     
     for b in range (1,nbands+1):
         inband = inb.GetRasterBand(b)
-        data = inband.ReadAsArray(x_min,y_min,cols_out,rows_out).astype(input_type)
+        data = inband.ReadAsArray(x_min,y_min,cols_out,rows_out).astype(data_type)
         outband=output.GetRasterBand(b)
         outband.WriteArray(data,0,0) #write to output image
     
     output.SetGeoTransform(geotransform) #set the transformation
-    output.SetProjection(inprj)
+    output.SetProjection(inb.GetProjection())
     # close the data source and text file
     datasource.Destroy()
-    #print 'Clipped file: ' + name[:-4] + '_city.TIF'
     
 
-def merge(path,output,name):
+def merge(input_raster_list,output_raster,data_type):
     
+    '''Merge single-band files into one multi-band file
+    
+    :param input_raster_list: list with paths and names of the input raster files (*.TIF,*.tiff) (list of strings)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
+    :returns:  an output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 19/03/2014
+    ''' 
+    
+    final_list = []
+    for f in range(0,len(input_raster_list)): #read image by image
+        band_list = read_image(input_raster_list[f],data_type,0)
+        rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster_list[f])
+        final_list.append(band_list[0]) #append every band to a unique list
+        
+    write_image(final_list,data_type,0,output_raster,rows,cols,geo_transform,projection) #write the list to output file
+    
+    
+def split(input_raster,band_selection,data_type):
+    
+    '''Split a multi-band input file into single-band files
+    
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param band_selection: number associated with the band to extract (0: all bands, 1: blue, 2: greeen, 3:red, 4:infrared) (integer)
+    :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
+    :returns:  an output file is created for single-band
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
     '''
-    ###################################################################################################################
-    Merge different band-related files into a multi-band file
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - path: folder path of the original files
-     - output: name of the output file
-     - name: input files to be merged
-     
-    Output:
-     New file is created in the same folder
-    ###################################################################################################################
-    '''
-    #TODO: Wouldn't it be easier to pass a list of input strings to the function?
-    
-    #function to extract single file names
-    instring = name.split()
-    num = len(instring)
-    #os command to merge files into separate bands
-    com = 'gdal_merge.py -separate -of GTiff -o ' + path + output
-    for i in range(0,num):
-        com = com + path + instring[i] + ' '
-    os.system(com)
-    print 'Output file: ' + output
-    
-    
-def split(path,name,option):
-    
-    '''
-    ###################################################################################################################
-    Split the multi-band input image into different band-related files
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - path: folder path of the image files
-     - name: name of the input file to be split
-     - option: specifies the band to extract, if equal to 0 all the bands are going to be extracted
-    
-    Output:
-     Output file name contains the number of the extracted band - example: B1.TIF for band number 1
-    ###################################################################################################################
-    '''
+
     #TODO: Do we need this?
     #TODO: Would rename arguments merge(src_img, dst_dir, option)
     
-    osgeo.gdal.AllRegister()
-    #open the input file
-    inputimg = osgeo.gdal.Open(path+name,GA_ReadOnly)
-    if inputimg is None:
-        print 'Could not open ' + name
-        sys.exit(1)
-    #extraction of columns, rows and bands from the input image    
-    cols=inputimg.RasterXSize
-    rows=inputimg.RasterYSize
-    bands=inputimg.RasterCount
-    geoMatrix = inputimg.GetGeoTransform()
-    inprj=inputimg.GetProjection()
-    
-    if (option!=0):
-        #extraction of just one band to a file
-        inband=inputimg.GetRasterBand(option)
-        driver=inputimg.GetDriver()
-        output=driver.Create(path+'B'+str(option)+'.TIF',cols,rows,1,GDT_Int32)
-        outband=output.GetRasterBand(1)
-        data = inband.ReadAsArray().astype(np.int32)
-        outband.WriteArray(data,0,0)
-        print 'Output file: B' + str(option) + '.TIF'
+    band_list = read_image(input_raster,data_type,band_selection)
+    rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster)
+    if band_selection == 0:
+        for b in range(1,nbands+1):
+            write_image(band_list,data_type,b,input_raster[:-4]+'_B'+str(b)+'.TIF',rows,cols,geo_transform,projection)
     else:
-        #extraction of all the bands to different files
-        for i in range(1,bands+1):
-            inband=inputimg.GetRasterBand(i)
-    
-            driver=inputimg.GetDriver()
-            output=driver.Create(path+'B'+str(i)+'.TIF',cols,rows,1,GDT_Int32)
-            outband=output.GetRasterBand(1)
-    
-            data = inband.ReadAsArray().astype(np.int32)
-            outband.WriteArray(data,0,0)
-            output.SetGeoTransform(geoMatrix) #set the transformation
-            output.SetProjection(inprj)
-            print 'Output file: B' + str(i) + '.TIF'
-    inputimg=None   
+        write_image(band_list,data_type,band_selection,input_raster[:-4]+'_B'+str(band_selection)+'.TIF',rows,cols,geo_transform,projection)  
     
 
-def Extraction(img1,img2):
+def gcp_extraction(input_band_ref,input_band,output_option):
     
-    '''
-    ###################################################################################################################
-    Feature Extraction using the SURF algorithm
+    '''GCP extraction and filtering using the SURF algorithm
     
-    Input:
-     - image1: 2darray related to the reference image
-     - image2: 2darray related to the image to be corrected
+    :param input_band_ref: 2darray byte format (numpy array) (unsigned integer 8bit)
+    :param input_band: 2darray byte format (numpy array) (unsigned integer 8bit)
+    :param output_option: 0 for indexes, 1 for coordinates (default 0) (integer)
+    :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
+    :returns:  an output file is created for single-band
+    :raises: AttributeError, KeyError
     
-    Output:
-    Returns a matrix with x,y coordinates of matching points
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 19/03/2014
     '''
     #TODO: It takes only a 2d array (so only one image band) and not the full image content?
     #TODO: 2d array is created by using Read_Image() -> band_list[i]?
@@ -259,18 +205,18 @@ def Extraction(img1,img2):
     #TODO: Would rename function to something like auto_gcp()
     #TODO: Output a list of gcps following the structure required by gdal_transform -> this way we could use gdal for the actual transformation and only focus on a robuts and flexible gcp detection
     #TODO: We should think of an option to manually adjust auto gcps for example using QGIS georeferencer (comment from Dilkushi during skype call 7.3.2014)
-    
+    #C:\OSGeo4W\bin
     detector = cv2.FeatureDetector_create("SURF") 
     descriptor = cv2.DescriptorExtractor_create("BRIEF")
     matcher = cv2.DescriptorMatcher_create("BruteForce-Hamming")
     
     # detect keypoints
-    kp1 = detector.detect(img1)
-    kp2 = detector.detect(img2)
+    kp1 = detector.detect(input_band_ref)
+    kp2 = detector.detect(input_band)
     
     # descriptors
-    k1, d1 = descriptor.compute(img1, kp1)
-    k2, d2 = descriptor.compute(img2, kp2)
+    k1, d1 = descriptor.compute(input_band_ref, kp1)
+    k2, d2 = descriptor.compute(input_band, kp2)
     
     # match the keypoints
     matches = matcher.match(d1, d2)
@@ -292,214 +238,68 @@ def Extraction(img1,img2):
         #matrix containing coordinates of the matching points
         points[i][:]= [int(k1[m.queryIdx].pt[0]),int(k1[m.queryIdx].pt[1]),int(k2[m.trainIdx].pt[0]),int(k2[m.trainIdx].pt[1])]
         i=i+1
+    #include new filter, slope filter not good for rotation
+    #include conversion from indexes to coordinates
     #print 'Feature Extraction - Done'
-    return points 
+    if output_option == None or output_option == 0:
+        return points #return indexes
+    else:
+        return pixel2world(points) #modify pixel2world function
 
 
-def Offset_Comp(k1,k2,k3):
+def linear_offset_comp(common_points):
     
-    '''
-    ###################################################################################################################
-    Offset computation after SURF extraction
+    '''Linear offset computation using points extracted by gcp_extraction
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
+    :param common_points: matrix with common points extracted by gcp_extraction (matrix of integers)
+    :returns:  list with x and y offset
+    :raises: AttributeError, KeyError
     
-    Input:
-     - k1: common points extracted from band 1
-     - k2: common points extracted from band 2
-     - k3: common points extracted from band 3
-    
-    Output:
-     Returns offset for x and y directions
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 19/03/2014
     '''
     
-    xoff1=np.zeros(len(k1)) 
-    xoff2=np.zeros(len(k2))
-    xoff3=np.zeros(len(k3))
-    
-    yoff1=np.zeros(len(k1))
-    yoff2=np.zeros(len(k2))
-    yoff3=np.zeros(len(k3))
+    xoff1=np.zeros(len(common_points)) 
+    yoff1=np.zeros(len(common_points))
     
     #Offset calculation band1
-    for l in range(0,len(k1)):
-        xoff1[l]=k1[l][2]-k1[l][0]
-        yoff1[l]=k1[l][3]-k1[l][1]
+    for l in range(0,len(common_points)):
+        xoff1[l]=common_points[l][2]-common_points[l][0]
+        yoff1[l]=common_points[l][3]-common_points[l][1]
    
-    #Offset calculation band2
-    for l in range(0,len(k2)):
-        xoff2[l]=k2[l][2]-k2[l][0]
-        yoff2[l]=k2[l][3]-k2[l][1]
-    
-    #Offset calculation band3
-    for l in range(0,len(k3)):
-        xoff3[l]=k3[l][2]-k3[l][0]
-        yoff3[l]=k3[l][3]-k3[l][1]
-        
     #Final offset calculation - mean of calculated offsets
-    xoff=round((xoff1.mean()+xoff2.mean()+xoff3.mean())/3)
-    yoff=round((yoff1.mean()+yoff2.mean()+yoff3.mean())/3)
-    
-    print 'Offset: ' + str(xoff) + ', ' + str(yoff)
+    xoff=round((xoff1.mean())) #mean computed in case of more than one common point
+    yoff=round((yoff1.mean())) #mean computed in case of more than one common point
     
     return xoff,yoff
-
-
-def shift_comp(path,folder1,folder2,shapefile,k1,k2,k3):
-    
-    '''
-    ###################################################################################################################
-    Calculation of shift using 3 different bands for each acquisition; the feature extraction algorithm is used to extract features
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - path: path to the files
-     - folder1: name of the folder containing the first acquisition (reference images)
-     - folder2: name of the folder containing the second acquisition
-     - shapefile: path to the shapefile used to clip the image
-     
-    Output: 
-     Output file is in the same folder as the original file and is called "original_name_adj.TIF"
-    
-    Notes: 
-     The input files are supposed to be landsat files with STANDARD NAMES (example "LT51800331991183XXX01_B1.TIF") modified by OUR CLIP ALGORITHM (example "LT51800331991183XXX01_B1_city.TIF").
-     This procedure has been selected in order to facilitate the user.
-    ###################################################################################################################
-    '''
-            
-    xoff1=np.zeros(len(k1)) 
-    xoff2=np.zeros(len(k2))
-    xoff3=np.zeros(len(k3))
-    
-    yoff1=np.zeros(len(k1))
-    yoff2=np.zeros(len(k2))
-    yoff3=np.zeros(len(k3))
-    
-    #Offset calculation band1
-    for l in range(0,len(k1)):
-        xoff1[l]=k1[l][2]-k1[l][0]
-        yoff1[l]=k1[l][3]-k1[l][1]
-   
-    #Offset calculation band2
-    for l in range(0,len(k2)):
-        xoff2[l]=k2[l][2]-k2[l][0]
-        yoff2[l]=k2[l][3]-k2[l][1]
-    
-    #Offset calculation band3
-    for l in range(0,len(k3)):
-        xoff3[l]=k3[l][2]-k3[l][0]
-        yoff3[l]=k3[l][3]-k3[l][1]
-        
-    #Final offset calculation - mean of calculated offsets
-    xoff=round((xoff1.mean()+xoff2.mean()+xoff3.mean())/3)
-    yoff=round((yoff1.mean()+yoff2.mean()+yoff3.mean())/3)
-    
-    print 'Offset: ' + str(xoff) + ', ' + str(yoff)
-    
-    '''
-    Computing initial and final pixel for submatrix extraction.
-    For each band a new matrix is created with rows+2*yoff and cols+2*xoff, filled with zeros where no original pixel values are available.
-    The algorithm extracts a submatrix with same dimensions as the original image but changing the starting point using the calculated offset:
-    - in case of negative offset the submatrix is going to start from (0,0)
-    - in case of positive index the starting point is (2*off,2*yoff) because of the new dimensions
-    '''
-    
-    if (xoff<=0):
-        xstart=0
-    else:
-        xstart=2*xoff
-        
-    if (yoff<=0):
-        ystart=0
-    else:
-        ystart=2*yoff
-    
-    band_files = os.listdir(path + folder2) #list files inside the directory
-    #print band_files
-    for j in range(1,9):
-        band_file = [s for s in band_files if "B"+str(j)+"_city" in s]
-        if band_file:
-            inputimg2 = osgeo.gdal.Open(folder2+band_file[0],GA_ReadOnly) #open the image
-            #print inputimg2
-            if inputimg2 is None:
-                print 'Could not open ' + band_file[0]
-                sys.exit(1)
-            cols2=inputimg2.RasterXSize #number of columns
-            rows2=inputimg2.RasterYSize #number of rows
-            band2 = inputimg2.RasterCount #number of bands
-            geotransform=inputimg2.GetGeoTransform() #get geotransformation from the original image
-            inprj=inputimg2.GetProjection() #get projection from the original image
-            out=np.zeros(shape=(rows2,cols2)) #empty matrix
-            driver=inputimg2.GetDriver()
-            if os.path.isfile(folder2+band_file[0][:-4]+'_adj.TIF') == True:
-                os.remove(folder2+band_file[0][:-4]+'_adj.TIF')
-            output=driver.Create(folder2+band_file[0][:-4]+'_adj.TIF',cols2,rows2,band2) #create the output multispectral image
-            inband2=inputimg2.GetRasterBand(1)
-            outband=output.GetRasterBand(1)
-            data2 = inband2.ReadAsArray()
-            if j==8: #panchromatic band, dimensions of the panchromatic are different
-                xoff = xoff*2
-                yoff = yoff*2
-                if (xoff<=0):
-                    xstart=0
-                else:
-                    xstart=2*xoff
-    
-                if (yoff<=0):
-                    ystart=0
-                else:
-                    ystart=2*yoff
-            xend=xstart+cols2
-            yend=ystart+rows2
-    
-            data2=np.c_[np.zeros((rows2,np.abs(xoff))),data2,np.zeros((rows2,np.abs(xoff)))] #add columns of zeros depending on the value of xoff around the original data
-            data2=np.r_[np.zeros((np.abs(yoff),cols2+2*np.abs(xoff))),data2,np.zeros((np.abs(yoff),cols2+2*np.abs(xoff)))] #add rows of zeros depending on the value of yoff around the original data
-            out=data2[int(ystart):int(yend),int(xstart):int(xend)] #submatrix extraction
-            outband.WriteArray(out,0,0) #write to output image
-            output.SetGeoTransform(geotransform) #set the transformation
-            output.SetProjection(inprj)   #set the projection
-            print 'Output: ' + band_file[0][:-4] + '_adj.TIF created' #output file created
-        #inputimg2=None
-        #output=None
         
 
-def pansharp(input_multiband,input_panchromatic,output_folder,output_name):
+def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     
-    '''
-    ###################################################################################################################
-    Performs the pan-sharpening process using OTB library
- 
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-   
-    Input:
-     - input_multiband: path to the multispectral image
-     - input_panchromatic: path to the panchromatic image
-     - output_folder: path to output folder, used to save the resampled image
-     - output_name: name of the output pan-sharpened file
+    '''Pansharpening operation using OTB library
     
-    Output:
-     Nothing is returned. Output image is automatically saved.
-    ###################################################################################################################
+    :param input_raster_multiband: path and name of the input raster multi-band file (*.TIF,*.tiff) (string)
+    :param input_raster_panchromatic: path and name of the input raster panchromatic file (*.TIF,*.tiff) (string)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :returns:  an output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 19/03/2014
     '''
+
     #TODO: Specify in description which pansharpening algorithm iss used by this function
     
-    rowsp,colsp,nbands,geo_transform,projection = Read_Image_Parameters(input_panchromatic)
-    rowsxs,colsxs,nbands,geo_transform,projection = Read_Image_Parameters(input_multiband)
-    print rowsp,colsp
-    print rowsxs,colsxs
-    
+    rowsp,colsp,nbands,geo_transform,projection = read_image_parameters(input_raster_panchromatic)
+    rowsxs,colsxs,nbands,geo_transform,projection = read_image_parameters(input_raster_multiband)
+ 
     scale_rows = round(float(rowsp)/float(rowsxs),4)
     scale_cols = round(float(colsp)/float(colsxs),4)
-    print scale_rows,scale_cols
+   
     RigidTransformResample = otbApplication.Registry.CreateApplication("RigidTransformResample") 
     # The following lines set all the application parameters: 
-    RigidTransformResample.SetParameterString("in", input_multiband) 
-    RigidTransformResample.SetParameterString("out", output_folder + "resampled.tif") 
+    RigidTransformResample.SetParameterString("in", input_raster_multiband) 
+    RigidTransformResample.SetParameterString("out", input_raster_multiband[:-4]+'_resampled.tif') 
     RigidTransformResample.SetParameterString("transform.type","id") 
     RigidTransformResample.SetParameterFloat("transform.type.id.scalex", scale_cols) 
     RigidTransformResample.SetParameterFloat("transform.type.id.scaley", scale_rows) 
@@ -508,40 +308,36 @@ def pansharp(input_multiband,input_panchromatic,output_folder,output_name):
  
     Pansharpening = otbApplication.Registry.CreateApplication("Pansharpening") 
     # Application parameters
-    Pansharpening.SetParameterString("inp", input_panchromatic) 
-    Pansharpening.SetParameterString("inxs", output_folder + "resampled.tif") 
+    Pansharpening.SetParameterString("inp", input_raster_panchromatic) 
+    Pansharpening.SetParameterString("inxs", input_raster_multiband[:-4]+'_resampled.tif') 
     Pansharpening.SetParameterInt("ram", 2000) 
-    Pansharpening.SetParameterString("out", output_folder + output_name) 
+    Pansharpening.SetParameterString("out", output_raster) 
     Pansharpening.SetParameterOutputImagePixelType("out", 3) 
      
     Pansharpening.ExecuteAndWriteOutput()
-    #os.remove(output_folder+"resampled.tif")
     
     
-def resampling(input_file,output_file,scale_value,resampling_algorithm):
+def resampling(input_raster,output_raster,output_resolution,resampling_algorithm):
     
-    '''
-    ###################################################################################################################
-    Resample of the image using the specified algorithm
-
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
+    '''Resampling operation using OTB library
     
-    Input:
-     - input_file: path and name of the input file
-     - output_file: path and name of the output file (resampled)
-     - scale_value: resampling factor
-     - resampling_algorithm: choice among different algorithms (nearest_neigh,linear,bicubic)
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :param output_resolution: resolution of the outout raster file (float)
+    :param resampling_algorithm: choice among different algorithms (nearest_neigh,linear,bicubic)
+    :returns:  an output file is created
+    :raises: AttributeError, KeyError
     
-    Output:
-     An output resampled file is created
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 19/03/2014
     '''
     
+    rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster)
+    scale_value = round(float(geo_transform[1])/float(output_resolution),4)
     RigidTransformResample = otbApplication.Registry.CreateApplication("RigidTransformResample") 
     # The following lines set all the application parameters: 
-    RigidTransformResample.SetParameterString("in", input_file) 
-    RigidTransformResample.SetParameterString("out", output_file) 
+    RigidTransformResample.SetParameterString("in", input_raster) 
+    RigidTransformResample.SetParameterString("out", output_raster) 
     RigidTransformResample.SetParameterString("transform.type","id") 
     RigidTransformResample.SetParameterFloat("transform.type.id.scalex", scale_value) 
     RigidTransformResample.SetParameterFloat("transform.type.id.scaley", scale_value) 

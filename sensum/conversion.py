@@ -1,19 +1,17 @@
 '''
+.. module:: conversion
+   :platform: Unix, Windows
+   :synopsis: This module includes functions related to conversions between different data types and reference systems.
+
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+'''
+'''
 ---------------------------------------------------------------------------------
                                 conversion.py
 ---------------------------------------------------------------------------------
 Created on May 13, 2013
-Last modified on Mar 09, 2014
-
-Author(s): Mostapha Harb - Daniele De Vecchi 
-           University of Pavia - Remote Sensing Laboratory / EUCENTRE Foundation
-
-Contact: daniele.devecchi03@universitadipavia.it
-         mostapha.harb@eucentre.it
-
-Description: This module includes functions related to conversions between 
-             different data types and reference systems.
-
+Last modified on Mar 18, 2014
 ---------------------------------------------------------------------------------
 Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
          vUlnerability and recovery Monitoring (SENSUM)
@@ -44,150 +42,162 @@ else:
     separator = '\\'
 
 
-def Read_Image(path,data_type):
+def data_type2gdal_data_type(data_type):
     
-    '''
-    ###################################################################################################################
-    Reads all the bands of an input image using GDAL
+    '''Conversion from numpy data type to GDAL data type
+    
+    :param data_type: numpy type (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type).
+    :returns: corresponding GDAL data type
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    ''' 
+    
+    if data_type == np.uint16:
+        return GDT_UInt16
+    if data_type == np.uint8:
+        return GDT_Byte
+    if data_type == np.int32:
+        return GDT_Int32
+    if data_type == np.float32:
+        return GDT_Float32
+    if data_type == np.float64:
+        return GDT_Float64
+    
 
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
+def read_image(input_raster,data_type,band_selection):
     
-    Input:
-     - path: path of the input image 
-     - data_type: type of data to force; for example np.uint16, np.uint8 or np.float32.
-        Default is np.uint16
+    '''Read raster using GDAL
     
-    Output:
-     A list is returned containing rows, columns, number of bands, list of matrices related to each band, geo-transformation and projection (in this order)
-    ###################################################################################################################
-    '''
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string).
+    :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type).
+    :param band_selection: number associated with the band to extract (0: all bands, 1: blue, 2: greeen, 3:red, 4:infrared) (integer).
+    :returns:  a list containing the desired bands as ndarrays (list of arrays).
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    ''' 
+    
     #TODO: Why not restrict this function to return band_list only? Would make it more clear and not redundant with Read_Image_Parameters.
     #TODO: You use as default import type uint16 but for export of images you use gdt_float32. 
     #TODO: Is this the general function to make rasters available to functions? How do you deal with GDAL to OpenCV matrices?
     band_list = []
-    if data_type == 0:
+    
+    if data_type == 0: #most of the images (MR and HR) can be read as unsigned int 16
         data_type = np.uint16
         
-    inputimg = osgeo.gdal.Open(path, GA_ReadOnly)
+    inputimg = osgeo.gdal.Open(input_raster, GA_ReadOnly)
     cols=inputimg.RasterXSize
     rows=inputimg.RasterYSize
     nbands=inputimg.RasterCount
     
-    for i in range(1,nbands+1):
-        inband = inputimg.GetRasterBand(i)
-        mat_data = inband.ReadAsArray().astype(data_type)
+    if band_selection == 0:
+        #read all the bands
+        for i in range(1,nbands+1):
+            inband = inputimg.GetRasterBand(i) 
+            mat_data = inband.ReadAsArray(0,0,cols,rows).astype(data_type)
+            band_list.append(mat_data) 
+    else:
+        #read the single band
+        inband = inputimg.GetRasterBand(band_selection) 
+        mat_data = inband.ReadAsArray(0,0,cols,rows).astype(data_type)
         band_list.append(mat_data)
     
-    geo_transform = inputimg.GetGeoTransform()
-    projection = inputimg.GetProjection()
-    return rows,cols,nbands,band_list,geo_transform,projection
+    inputimg = None    
+    return band_list
 
 
-def Read_Image_Parameters(path):
+def read_image_parameters(input_raster):
     
-    '''
-    ###################################################################################################################
-    Reads all parameters related to an image using GDAL. Used to save time in respect of the Read_Image function
+    '''Read raster parameters using GDAL
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-
-    Input:
-     - path: path of the input image 
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string).
+    :returns:  a list containing rows, columns, number of bands, geo-transformation matrix and projection.
+    :raises: AttributeError, KeyError
     
-    Output:
-     A list is returned containing rows, columns, number of bands, geo-transformation and projection (in this order)
-    ###################################################################################################################
-    '''
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    ''' 
    
-    inputimg = osgeo.gdal.Open(path, GA_ReadOnly)
+    inputimg = osgeo.gdal.Open(input_raster, GA_ReadOnly)
     cols=inputimg.RasterXSize
     rows=inputimg.RasterYSize
     nbands=inputimg.RasterCount
-    
     geo_transform = inputimg.GetGeoTransform()
     projection = inputimg.GetProjection()
+    
+    inputimg = None
     return rows,cols,nbands,geo_transform,projection
 
 
-def WriteOutputImage(projection_reference,path,folder,output_name,cols,rows,type,nbands,array_list):
-    
-    '''
-    ###################################################################################################################
-    Writes one or more matrixes to an image file setting the projection
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - projection_reference: path to the reference image used to get the projection
-     - path: path to the input folder
-     - folder: input file folder
-     - output_name: name of the output image
-     - cols: number of columns, in case set to 0 the number of columns is taken from the reference image
-     - rows: number of rows, in case set to 0 the number of rows is taken from the reference image
-     - type: type of data to be written into the output file, if 0 the default is GDT_FLoat32
-     - nbands: number of bands to be written to the output file
-     - array_list: list containing all the data to be written; each element of the list should be a matrix
-    
-    Output:
-     Output file is created into the same folder of the reference
-    ###################################################################################################################
-    '''
-    #TODO: Would merge arguments path, folder and output_name -> they seem to define the output.
+def write_image(band_list,data_type,band_selection,output_raster,rows,cols,geo_transform,projection):
    
-    # create the output image using a reference image for the projection
-    # type is the type of data
-    # array_list is a list containing all the data matrixes; a list is used because could be more than one matrix (more than one band)
-    # if cols and rows are not provided, the algorithm uses values from the reference image
-    # nbands contains the number of bands in the output image
-    #print ('len(array_list[0]',len(array_list[0]))
+    '''Write array to file as raster using GDAL
     
-    if type == 0:
-        type = GDT_Float32
-    inb = osgeo.gdal.Open(projection_reference, GA_ReadOnly)
-    driver = inb.GetDriver()
-    if rows == 0 or cols == 0:
-        rows = inb.RasterYSize
-        cols = inb.RasterXSize
-    #print rows,cols
-    outDs = driver.Create(path+folder+output_name, cols, rows,nbands, type)
+    :param band_list: list of arrays containing the different bands to write (list of arrays).
+    :param data_type: numpy data type of the output image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
+    :param band_selection: number associated with the band to write (0: all, 1: blue, 2: green, 3: red, 4: infrared) (integer)
+    :param output_raster: path and name of the output raster to create (*.TIF, *.tiff) (string)
+    :param rows: rows of the output raster (integer)
+    :param cols: columns of the output raster (integer)
+    :param geo_transform: geo-transformation matrix containing coordinates and resolution of the output (array of 6 elements, float)
+    :param projection: projection of the output image (string)
+    :returns: An output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    '''
+
+    if data_type == 0:
+        gdal_data_type = GDT_UInt16 #default data type
+    else:
+        gdal_data_type = data_type2gdal_data_type(data_type)
+    driver = osgeo.gdal.GetDriverByName('GTiff')
+
+    if band_selection == 0:
+        nbands = len(band_list)
+    else:
+        nbands = 1
+    outDs = driver.Create(output_raster, cols, rows,nbands, gdal_data_type)
     if outDs is None:
-        print 'Could not create ' + output_name
+        print 'Could not create output file'
         sys.exit(1)
-    for i in range(nbands): 
-        outBand = outDs.GetRasterBand(i+1)
         
-        #outmatrix = array_list[i].reshape(rows,cols)
-        outmatrix = array_list[i]
-        outBand.WriteArray(outmatrix, 0, 0)
-        
-    # georeference the image and set the projection
-    outDs.SetGeoTransform(inb.GetGeoTransform())
-    outDs.SetProjection(inb.GetProjection())
+    if band_selection == 0:
+        #write all the bands to file
+        for i in range(0,nbands): 
+            outBand = outDs.GetRasterBand(i+1)
+            outBand.WriteArray(band_list[i], 0, 0)
+    else:
+        #write the specified band to file
+        outBand = outDs.GetRasterBand(1)   
+        outBand.WriteArray(band_list[band_selection-1], 0, 0)
+    #assign geomatrix and projection
+    outDs.SetGeoTransform(geo_transform)
+    outDs.SetProjection(projection)
+    outDs = None
 
 
-def Shp2Rast(input_shape,output_image,rows,cols,field_name,px_W,px_H,x_min,x_max,y_min,y_max):
+def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_max,y_min,y_max):
     
+    '''Conversion from shapefile to raster using GDAL
+    
+    :param input_shape: path and name of the input shapefile (*.shp) (string)
+    :param output_raster: path and name of the output raster to create (*.TIF, *.tiff) (string)
+    :param rows: rows of the output raster (integer)
+    :param cols: columns of the output raster (integer)
+    :param field_name: name of the attribute field of the shapefile used to differentiate pixels (string)
+    :param 
+    :returns: An output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
     '''
-    ###################################################################################################################
-    Conversion from ESRI shapefile to raster
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-     
-    Input:
-     - input_shape: path of the input shapefile
-     - output_image: path and name of the output raster file
-     - rows: rows of the output raster
-     - cols: columns of the output raster
-     - field_name: name of the field from the shapefile used to differenciate segments (for example DN)
-    
-    Output:
-     Nothing is returned. Output image is automatically saved.
-    ###################################################################################################################
-    '''
+  
     #TODO: Explain additional arguments px_W,px_H,x_min,x_max,y_min,y_max
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
@@ -211,7 +221,7 @@ def Shp2Rast(input_shape,output_image,rows,cols,field_name,px_W,px_H,x_min,x_max
             cols = int(float((x_max-x_min)) / float(pixel_size_x))
             rows = int(float((y_max-y_min)) / float(pixel_size_y))
     if rows!=0 and cols!=0:    
-        target_ds = osgeo.gdal.GetDriverByName('GTiff').Create(output_image, cols,rows, 1, GDT_Float32)
+        target_ds = osgeo.gdal.GetDriverByName('GTiff').Create(output_raster, cols,rows, 1, GDT_Float32)
         target_ds.SetGeoTransform((x_min, pixel_size_x, 0,y_max, 0, -pixel_size_y))
         if source_srs:
             # Make the target raster have the same projection as the source
@@ -228,25 +238,20 @@ def Shp2Rast(input_shape,output_image,rows,cols,field_name,px_W,px_H,x_min,x_max
     return x_min,x_max,y_min,y_max
 
     
-def Rast2Shp(input_image,output_shape):
+def rast2shp(input_raster,output_shape):
     
+    '''Conversion from raster to shapefile using GDAL
+    
+    :param input_raster: path and name of the input raster (*.TIF, *.tiff) (string)
+    :param output_shape: path and name of the output shapefile to create (*.shp) (string)
+    :returns: An output shapefile is created 
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
     '''
-    ###################################################################################################################
-    Conversion from raster to ESRI shapefile
 
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - input_image: path of the input raster
-     - output_shape: path and name of the output shapefile
-    
-    Output:
-     Nothing is returned. Output shapefile is automatically saved.
-    ###################################################################################################################
-    ''' 
-    
-    src_image = osgeo.gdal.Open(input_image)
+    src_image = osgeo.gdal.Open(input_raster)
     src_band = src_image.GetRasterBand(1)
     projection = src_image.GetProjection()
     #mask = np.equal(src_band,1)
@@ -265,166 +270,70 @@ def Rast2Shp(input_image,output_shape):
     file_prj = open(output_shape[:-4]+'.prj', 'w')
     file_prj.write(outprj.ExportToWkt())
     file_prj.close()
+    src_image = None
+    outfile = None
+  
 
-
-def shp_conversion(path,name_input,name_output,epsg):
+def world2pixel(geo_transform, long, lat):
     
-    '''
-    ###################################################################################################################
-    Conversion from KML to SHP file using EPSG value as projection - Used to convert the drawn polygon around the city in GE to a SHP
+    '''Conversion from geographic coordinates to matrix-related indexes
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
+    :param geo_transform: geo-transformation matrix containing coordinates and resolution of the output (array of 6 elements, float)
+    :param long: longitude of the desired point (float)
+    :param lat: latitude of the desired point (float)
+    :returns: A list with matrix-related x and y indexes (x,y)
+    :raises: AttributeError, KeyError
     
-    Input:
-     - path: contains the folder path of the original file; the output file is going to be created into the same folder
-     - name_input: name of the kml input file
-     - name_output: name of shp output file
-     - epsg: epsg projection code
-     
-    Output:
-     SHP file is saved into the same folder of the original KML file
-    ###################################################################################################################
-    '''
-    #TODO: do we really need this function?
-    
-    #conversion from kml to shapefile
-    os.system("ogr2ogr -f 'ESRI Shapefile' " + path + name_output + ' ' + path + name_input)
-    # set the working directory
-    os.chdir(path)
-    # get the shapefile driver
-    driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
-    # create the input SpatialReference, 4326 is the default one
-    inSpatialRef = osgeo.osr.SpatialReference()
-    inSpatialRef.ImportFromEPSG(4326)
-    # create the output SpatialReference
-    outSpatialRef = osgeo.osr.SpatialReference()
-    outSpatialRef.ImportFromEPSG(epsg)
-    # create the CoordinateTransformation
-    coordTrans = osgeo.osr.CoordinateTransformation(inSpatialRef, outSpatialRef)
-    # open the input data source and get the layer
-    inDS = driver.Open(name_output, 0)
-    if inDS is None:
-        print 'Could not open file'
-        sys.exit(1)
-    inLayer = inDS.GetLayer()
-    # create a new data source and layer
-    if os.path.exists(name_output):
-        driver.DeleteDataSource(name_output)
-    outDS = driver.CreateDataSource(name_output)
-    if outDS is None:
-        print 'Could not create file'
-        sys.exit(1)
-    outLayer = outDS.CreateLayer('City', geom_type=osgeo.ogr.wkbPoint)
-    # get the FieldDefn for the name field
-    feature = inLayer.GetFeature(0)
-    fieldDefn = feature.GetFieldDefnRef('name')
-    # add the field to the output shapefile
-    outLayer.CreateField(fieldDefn)
-    # get the FeatureDefn for the output shapefile
-    featureDefn = outLayer.GetLayerDefn()
-    # loop through the input features
-    inFeature = inLayer.GetNextFeature()
-    while inFeature:
-        # get the input geometry
-        geom = inFeature.GetGeometryRef()
-        # reproject the geometry
-        geom.Transform(coordTrans)
-        # create a new feature
-        outFeature = osgeo.ogr.Feature(featureDefn)
-        # set the geometry and attribute
-        outFeature.SetGeometry(geom)
-        outFeature.SetField('name', inFeature.GetField('name'))
-        # add the feature to the shapefile
-        outLayer.CreateFeature(outFeature)
-        # destroy the features and get the next input feature
-        outFeature.Destroy
-        inFeature.Destroy
-        inFeature = inLayer.GetNextFeature()
-    # close the shapefiles
-    inDS.Destroy()
-    outDS.Destroy()
-    # create the *.prj file
-    outSpatialRef.MorphToESRI()
-    file = open(name_output[:-4]+'.prj', 'w')
-    file.write(outSpatialRef.ExportToWkt())
-    file.close()
-    print 'Conversion finished!'
-    
-
-def world2Pixel(geoMatrix, x, y):
-    
-    '''
-    ###################################################################################################################
-    Uses a gdal geomatrix (gdal.GetGeoTransform()) to calculate the pixel location of a geospatial coordinate 
-    
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-    
-    Input:
-     - geoMatrix: matrix related to coordinates
-     - x: x coordinate to transform
-     - y: y coordinate to transform
-    
-    Output:
-     List containing x and y related to the desired position
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
     '''
     
-    ulX = geoMatrix[0]
-    ulY = geoMatrix[3]
-    xDist = geoMatrix[1]
-    yDist = geoMatrix[5]
-    rtnX = geoMatrix[2]
-    rtnY = geoMatrix[4]
-    pixel = int((x - ulX) / xDist)
-    line = int((ulY - y) / xDist)
-    return (pixel, line)
+    ulX = geo_transform[0] #starting longitude
+    ulY = geo_transform[3] #starting latitude
+    xDist = geo_transform[1] #x resolution
+    yDist = geo_transform[5] #y resolution
+
+    pixel_x = int((long - ulX) / xDist)
+    pixel_y = int((ulY - lat) / xDist)
+    return (pixel_x, pixel_y)
 
 
-def Pixel2world(gt, cols, rows ):
+def pixel2world(geo_transform, cols, rows):
     
-    '''
-    ###################################################################################################################
-    Uses a gdal geomatrix (gdal.GetGeoTransform()) to calculate the geospatial coordinates of top-left and down-right pixel
+    '''Calculation of the geo-spatial coordinates of top-left and down-right pixel
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-
-    Input:
-     - gt: matrix related to coordinates
-     - cols: number of columns
-     - rows: number of rows
+    :param geo_transform: geo-transformation matrix containing coordinates and resolution of the output (array of 6 elements, float)
+    :param rows: number of rows (integer)
+    :param cols: number of columns (integer)
+    :returns: A list with top-left and down-right coordinates
+    :raises: AttributeError, KeyError
     
-    Output:
-     List containing the starting coordinates
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
     '''
     
-    minx = gt[0]
-    miny = gt[3] + cols*gt[4] + rows*gt[5] 
-    maxx = gt[0] + cols*gt[1] + rows*gt[2]
-    maxy = gt[3]     
+    minx = geo_transform[0]
+    miny = geo_transform[3] + cols*geo_transform[4] + rows*geo_transform[5] 
+    maxx = geo_transform[0] + cols*geo_transform[1] + rows*geo_transform[2]
+    maxy = geo_transform[3]     
     return (maxx,miny)
 
 
-def transform_utm_to_wgs84(easting, northing, zone):
+def utm2wgs84(easting, northing, zone):
     
+    '''Conversion from UTM projection to WGS84
+    
+    :param easting: east coordinate (float)
+    :param northing: north coordinate (float)
+    :param zone: number of the utm zone (integer)
+    :returns: A list with coordinates in the WGS84 system (longitude,latitude,altitude)
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 18/03/2014
+    '''
     '''
     ###################################################################################################################
-    Conversion from UTM projection to WGS84
-
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-        
-    Input:
-     - easting: east coordinate
-     - northing: north coordinate
-     - zone: utm zone number
-    
-    Output:
-     The coordinates in the WGS84 format are returned
-    
     Reference:
      http://monkut.webfactional.com/blog/archive/2012/5/2/understanding-raster-basic-gis-concepts-and-the-python-gdal-library/
     ###################################################################################################################
