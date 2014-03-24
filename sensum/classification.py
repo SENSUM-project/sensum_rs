@@ -3,8 +3,8 @@
    :platform: Unix, Windows
    :synopsis: This module includes functions related to the high-level classification of multi-spectral satellite images.
 
-.. moduleauthor:: Mostapha Harb <name@mail.com>
-.. moduleauthor:: Daniele De Vecchi <name@mail.com>
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -32,9 +32,10 @@ import numpy as np
 import scipy.stats
 import osgeo.ogr
 import shutil
+import cv2
 import xml.etree.cElementTree as ET
 import otbApplication
-from sensum.conversion import Read_Image, WriteOutputImage, Shp2Rast
+from sensum.conversion import *
 
 if os.name == 'posix':
     separator = '/'
@@ -42,103 +43,149 @@ else:
     separator = '\\'
 
 
-def unsupervised_classification(input_file,output_file,n_classes,n_iterations):
+def unsupervised_classification_otb(input_raster,output_raster,n_classes,n_iterations):
     
     '''Unsupervised K-Means classification using OTB library.
     
-    :param input_file: The input file (str).
-    :param output_file: The output file (str).
-    :param n_classes: The number of classes (int).
-    :param n_iterations: The number of iterations (int).
-    :returns:  Output image is created containing results from the classification.
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :param n_classes: number of classes to extract (integer)
+    :param n_iterations: number of iterations of the classifier (integer)
+    :returns:  an output raster is created
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - 
-    Last modified: 13.05.2013
-    ''' 
-    
-    #TODO: especially for classifications it would be crucial to have a nd array as input. this way we can easily compile the multidimensional feature space for the calssification without writing to file which is rather unflexible.
-    #TODO: If OTB is problematic to use with arrays as IO, than OpenCV could be a valuable alternative as it has a very strong Machine Learning module
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 20/03/2014
+    '''
     
     KMeansClassification = otbApplication.Registry.CreateApplication("KMeansClassification") 
  
     # The following lines set all the application parameters: 
-    KMeansClassification.SetParameterString("in", input_file) 
+    KMeansClassification.SetParameterString("in", input_raster) 
     KMeansClassification.SetParameterInt("ts", 1000) 
     KMeansClassification.SetParameterInt("nc", n_classes) 
     KMeansClassification.SetParameterInt("maxit", n_iterations) 
     KMeansClassification.SetParameterFloat("ct", 0.0001) 
-    KMeansClassification.SetParameterString("out", output_file) 
+    KMeansClassification.SetParameterString("out", output_raster) 
     
     # The following line execute the application 
     KMeansClassification.ExecuteAndWriteOutput()
     
-
-def supervised_classification(classification_type,path,input_file,segmentation_file,output_file,training_field):
     
-    '''Supervised classification using OTB library.
+def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     
-    :param classification_type: String containing the chosen algorithm ('libsvm','svm','dt','gbt','bayes','rf','knn').
-    :param path: Path to the considered folder (str).
-    :param input_file: Name of the input file (str).
-    :param segmentation_file: Name of the shapefile result of the segmentation and with training classes already defined: The number of iterations (str).
-    :param output_file: Name of the output image (str).
-    :param training_field: Name of the field containing the defined class for each segment (str).
-    :returns:  Output image is created containing results from the classification.
+    '''Unsupervised K-Means classification using OpenCV library.
+    
+    :param input_band_list: list of 2darrays corresponding to bands (band 1: blue) (list of numpy arrays)
+    :param n_classes: number of classes to extract (integer)
+    :param n_iterations: number of iterations of the classifier (integer)
+    :returns:  an output matrix is created with the results of the classifier
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - 
-    Last modified: 13.05.2013
-    ''' 
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 20/03/2014
+    '''
     
-    #TODO: Need clarification concerning the training data input.
-    #TODO: I would decouple training and classification stages!
-    #TODO: Output of training should be a trained learning machine (OpenCV for example provides an xml based output for its models) - model_buildings.txt is this?
+    img = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2],input_band_list[3])) #stack the 4 bands together
+    Z = img.reshape((-1,4)) #reshape for the classifier
     
-    #define training file
-    driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    Z = np.float32(Z) #convert to np.float32
+    criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, n_iterations, 0.0001) #definition of the criteria
+    ret,label,center=cv2.kmeans(Z,n_classes,criteria,n_iterations,cv2.KMEANS_RANDOM_CENTERS)
+    center = np.uint8(center)
+    res = center[label.flatten()]
+    res2 = res[:,0] #extraction of the desired row
+    output_array = res2.reshape(input_band_list[0].shape) #reshape to original raster dimensions
     
-    infile=driver_shape.Open(path+segmentation_file,0)
-    inlayer=infile.GetLayer()
-  
-    n_feature = inlayer.GetFeatureCount()
-    if n_feature>200:
-        training_file = segmentation_file[:-4] + '_training.shp'
-        outfile=driver_shape.CreateDataSource(path+training_file)
-        outlayer=outfile.CreateLayer('Training_shape',geom_type=osgeo.ogr.wkbPolygon)
-        
-        layer_defn = inlayer.GetLayerDefn()
-        infeature = inlayer.GetNextFeature()
-        feature_def = outlayer.GetLayerDefn()
-        dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
-        class_def = osgeo.ogr.FieldDefn('Class',osgeo.ogr.OFTInteger)
-        outlayer.CreateField(dn_def)
-        outlayer.CreateField(class_def)
-        while infeature:
-            dn = infeature.GetField('DN')
-            training_value = infeature.GetField(training_field)
-            if training_value is not None and training_value != 255:
-                geom = infeature.GetGeometryRef() 
-                outfeature = osgeo.ogr.Feature(feature_def)
-                outfeature.SetGeometry(geom)
-                outfeature.SetField('DN',dn)
-                outfeature.SetField('Class',training_value)
-                outlayer.CreateFeature(outfeature)
-                outfeature.Destroy()          
-            infeature = inlayer.GetNextFeature()
-       
-        shutil.copyfile(path+segmentation_file[:-4]+'.prj', path+training_file[:-4]+'.prj')
-        
-        # close the shapefiles
-        infile.Destroy()
-        outfile.Destroy()
-    else:
-        training_file = segmentation_file
+    return output_array
+    
+    
+def train_classifier(input_raster,input_shape,output_txt,classification_type,training_field):
+    
+    '''Training of the desired classifier using OTB library
+    
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param input_shape: path and name of the input shapefile containing the training set (*.TIF,*.tiff) (string)
+    :param output_txt: path and name of text file with the training parameters (*.txt) (string)
+    :param classification type: definition of the desired classification algorithm ('libsvm','svm','dt','gbt','bayes','rf','knn') (string)
+    :param training_field: name of the discriminant attribute in the training shapefile (string)
+    :returns:  an output text file is created along with a csv file containing a confusion matrix
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 22/03/2014
+    
+    Reference: http://orfeo-toolbox.org/CookBook/CookBooksu118.html#x152-8600005.8.8
+    '''
+    root = ET.Element("FeatureStatistics")
     #XML file creation as input for OTB
-    rows,cols,nbands,band_list,geotransform,projection = Read_Image(path+input_file,np.uint16)
+    print len(input_raster)
+    
+    for i in range(0,len(input_raster)):
+        rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster[i])
+        band_list = read_image(input_raster[i],np.uint16,0)
+        statistic = ET.SubElement(root,"Statistic")
+        statistic.set("name","mean")
+        for b in range(0,nbands):
+            statistic_vector = ET.SubElement(statistic,"StatisticVector")
+            statistic_vector.set("value",str(round(np.mean(band_list[b]),4)))
+      
+          
+    for i in range(0,len(input_raster)):
+        band_list = read_image(input_raster[i],np.uint16,0)
+        statistic = ET.SubElement(root,"Statistic")
+        statistic.set("name","stddev")
+        for b in range(0,nbands):
+            statistic_vector = ET.SubElement(statistic,"StatisticVector")
+            statistic_vector.set("value",str(round(np.std(band_list[b])/2,4)))
+        
+    tree = ET.ElementTree(root)
+    tree.write(input_raster[0][:-4]+'_statistics.xml')
+    
+    #OTB Train Classifier
+    TrainImagesClassifier = otbApplication.Registry.CreateApplication("TrainImagesClassifier") 
+     
+    # The following lines set all the application parameters: 
+    TrainImagesClassifier.SetParameterStringList("io.il", input_raster) 
+    TrainImagesClassifier.SetParameterStringList("io.vd", input_shape) 
+    TrainImagesClassifier.SetParameterString("io.imstat", input_raster[0][:-4]+'_statistics.xml') 
+    TrainImagesClassifier.SetParameterInt("sample.mv", 100) 
+    TrainImagesClassifier.SetParameterInt("sample.mt", 100) 
+    TrainImagesClassifier.SetParameterFloat("sample.vtr", 0.5) 
+    TrainImagesClassifier.SetParameterString("sample.edg","1") 
+    TrainImagesClassifier.SetParameterString("sample.vfn", training_field)
+    TrainImagesClassifier.SetParameterString("classifier",classification_type) 
+    TrainImagesClassifier.SetParameterString("io.out", output_txt)  
+    TrainImagesClassifier.SetParameterString("io.confmatout", output_txt[:-4] + "_ConfusionMatrix.csv") 
+    
+    # The following line execute the application 
+    TrainImagesClassifier.ExecuteAndWriteOutput()
+ 
+
+def supervised_classification(input_raster,input_txt,output_raster):
+    
+    '''Supervised classification using OTB library
+    
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param input_txt: path and name of text file with the training parameters (*.txt) (string)
+    :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :returns:  an output raster file is created with the results of the classification
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 22/03/2014
+    
+    Reference: http://orfeo-toolbox.org/CookBook/CookBooksu115.html#x149-8410005.8.5
+    '''
+    
+    #XML file creation as input for OTB. File has to be re-generated in case of training file produced with different input file
+    rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster)
+    band_list = read_image(input_raster,np.uint16,0)
+    
     root = ET.Element("FeatureStatistics")
     statistic = ET.SubElement(root,"Statistic")
     statistic.set("name","mean")
+    
     for b in range(0,nbands):
         statistic_vector = ET.SubElement(statistic,"StatisticVector")
         statistic_vector.set("value",str(round(np.mean(band_list[b]),4)))
@@ -150,68 +197,43 @@ def supervised_classification(classification_type,path,input_file,segmentation_f
         statistic_vector.set("value",str(round(np.std(band_list[b])/2,4)))
     
     tree = ET.ElementTree(root)
-    tree.write(path+input_file[:-4]+'_statistics.xml')
-    
-    
-    #OTB Train Classifier
-    TrainImagesClassifier = otbApplication.Registry.CreateApplication("TrainImagesClassifier") 
-     
-    # The following lines set all the application parameters: 
-    TrainImagesClassifier.SetParameterStringList("io.il", [path+input_file]) 
-    TrainImagesClassifier.SetParameterStringList("io.vd", [path+training_file]) 
-    TrainImagesClassifier.SetParameterString("io.imstat", path+input_file[:-4]+'_statistics.xml') 
-    TrainImagesClassifier.SetParameterInt("sample.mv", 100) 
-    TrainImagesClassifier.SetParameterInt("sample.mt", 100) 
-    TrainImagesClassifier.SetParameterFloat("sample.vtr", 0.5) 
-    TrainImagesClassifier.SetParameterString("sample.edg","1") 
-    TrainImagesClassifier.SetParameterString("sample.vfn", "Class")
-    TrainImagesClassifier.SetParameterString("classifier",classification_type) 
-    TrainImagesClassifier.SetParameterString("io.out", path+classification_type+"_Model_buildings.txt")  
-    TrainImagesClassifier.SetParameterString("io.confmatout", path+classification_type+"_ConfusionMatrix.csv") 
-    
-    # The following line execute the application 
-    TrainImagesClassifier.ExecuteAndWriteOutput()
+    tree.write(input_raster[:-4]+'_statistics.xml')
     
     # The following line creates an instance of the ImageClassifier application 
     ImageClassifier = otbApplication.Registry.CreateApplication("ImageClassifier") 
     # The following lines set all the application parameters: 
-    ImageClassifier.SetParameterString("in", path+input_file) 
-    ImageClassifier.SetParameterString("imstat", path+input_file[:-4]+'_statistics.xml') 
-    ImageClassifier.SetParameterString("model", path+classification_type+"_Model_buildings.txt") 
-    ImageClassifier.SetParameterString("out", path+output_file+classification_type+'.TIF') 
+    ImageClassifier.SetParameterString("in", input_raster) 
+    ImageClassifier.SetParameterString("imstat", input_raster[:-4]+'_statistics.xml') 
+    ImageClassifier.SetParameterString("model", input_txt) 
+    ImageClassifier.SetParameterString("out", output_raster) 
     # The following line execute the application 
     ImageClassifier.ExecuteAndWriteOutput()
     
 
-def class_to_segments(classification_file,segmentation_file,output_file):
+def class_to_segments(input_raster,input_shape,output_shape):
     
-    '''
-    ###################################################################################################################
-    Assign values from classification to segments
- 
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-   
-    Input:
-     - classification_file: path and name of the file containing the classification results (raster)
-     - segmentation_file: path and name of the file containing the segmentation results (shapefile)
-     - output_file: path and name of the output file
+    '''Assign the most frequent value inside a segment to the segment itself
     
-    Output:
-     A shapefile is created with polygons from segmentation and class values
-    ###################################################################################################################
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param input_shape: path and name of shapefile with the segmentation results (*.shp) (string)
+    :param output_shape: path and name of the output shapefile (*.shp) (string)
+    :returns:  an output shapefile is created with a new attribute field related to the most frequent value inside the segment
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/03/2014
     '''
     
     #TODO: this is only a spatial union operation, isn't it? So it is not part of the hybrid approach where you aggregate pixel classes to segments!?
-    
-    rows,cols,nbands,band_list_class,geotransform,projection = Read_Image(classification_file,np.int32)
-    Shp2Rast(segmentation_file,segmentation_file[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0)
-    rows,cols,nbands,band_list_seg,geotransform,projection = Read_Image(segmentation_file[:-4]+'.TIF',np.int32)
+    rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
+    band_list_class = read_image(input_raster,np.int32,0)
+    shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
+    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32)
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
-    infile=driver_shape.Open(segmentation_file)
+    infile=driver_shape.Open(input_shape)
     inlayer=infile.GetLayer()
-    outfile=driver_shape.CreateDataSource(output_file)
+    outfile=driver_shape.CreateDataSource(output_shape)
     outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
     
     layer_defn = inlayer.GetLayerDefn()
@@ -220,12 +242,10 @@ def class_to_segments(classification_file,segmentation_file,output_file):
     dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
     class_def = osgeo.ogr.FieldDefn('Class',osgeo.ogr.OFTInteger)
     area_def = osgeo.ogr.FieldDefn('Area',osgeo.ogr.OFTReal)
-    #length_def = osgeo.ogr.FieldDefn('Length',osgeo.ogr.OFTReal)
     
     outlayer.CreateField(dn_def)
     outlayer.CreateField(class_def)
     outlayer.CreateField(area_def)
-    #outlayer.CreateField(length_def)
     
     n_feature = inlayer.GetFeatureCount()
     j = 1
@@ -236,12 +256,11 @@ def class_to_segments(classification_file,segmentation_file,output_file):
         # get the input geometry
         geom = infeature.GetGeometryRef()
         area = geom.Area()
-        #length = geom.Length()
         # create a new feature
         outfeature = osgeo.ogr.Feature(feature_def)
         # set the geometry and attribute
         outfeature.SetGeometry(geom)
-        seg_pos = np.where(band_list_seg[0]==dn)
+        seg_pos = np.where(band_list_seg[0] == dn)
         mat_pos = np.zeros(len(seg_pos[0]))
         
         for l in range(0,len(seg_pos[0])):
@@ -253,7 +272,6 @@ def class_to_segments(classification_file,segmentation_file,output_file):
         outfeature.SetField('DN',dn)
         outfeature.SetField('Class',mode)
         outfeature.SetField('Area',area)
-        #outfeature.SetField('Length',length)
         outlayer.CreateFeature(outfeature)
         outfeature.Destroy() 
         infeature = inlayer.GetNextFeature()
@@ -262,34 +280,31 @@ def class_to_segments(classification_file,segmentation_file,output_file):
     infile.Destroy()
     outfile.Destroy()    
     
-    shutil.copyfile(segmentation_file[:-4]+'.prj', output_file[:-4]+'.prj')
+    shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj')
     
 
-def confusion_matrix(classification_file,output_file,reference_shapefile,reference_field):    
+def confusion_matrix(input_raster,input_shape,reference_field,output_file):    
     
-    '''
-    ###################################################################################################################
-    Compute a confusion matrix for a classification
+    '''Compute a confusion matrix for accuracy estimation of the classification
     
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-
-    Input:
-     - classification_file: path and name of the file containing the classification results (raster)
-     - output_file: path and name of the output csv file (csv)
-     - reference_shapefile: path and name of the shapefile containing the reference classes (shapefile)
-     - reference_field: field of the shapefile to be used as a reference
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param input_shape: path and name of shapefile with the reference polygons (*.shp) (string)
+    :param reference_field: name of the discriminant attribute in the reference shapefile (string)
+    :param output_file: path and name of the output csv file (*.csv) (string)
+    :returns:  an output csv file is created containing the confusion matrix with rows as reference labels and columns as produced labels
+    :raises: AttributeError, KeyError
     
-    Output:
-     A csv file is created containing the confusion matrix with rows as reference labels and columns as produced labels.
-    ###################################################################################################################
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/03/2014
+    
+    Reference: http://orfeo-toolbox.org/CookBook/CookBooksu112.html#x146-8070005.8.2
     '''
     
     ComputeConfusionMatrix = otbApplication.Registry.CreateApplication("ComputeConfusionMatrix") 
-    ComputeConfusionMatrix.SetParameterString("in", classification_file) 
+    ComputeConfusionMatrix.SetParameterString("in", input_raster) 
     ComputeConfusionMatrix.SetParameterString("out", output_file) 
     ComputeConfusionMatrix.SetParameterString("ref","vector") 
-    ComputeConfusionMatrix.SetParameterString("ref.vector.in", reference_shapefile) 
+    ComputeConfusionMatrix.SetParameterString("ref.vector.in", input_shape) 
     ComputeConfusionMatrix.SetParameterString("ref.vector.field", reference_field) 
     ComputeConfusionMatrix.SetParameterInt("nodatalabel", 255) 
      
@@ -297,86 +312,82 @@ def confusion_matrix(classification_file,output_file,reference_shapefile,referen
     ComputeConfusionMatrix.ExecuteAndWriteOutput()
     
 
-def extract_class(classification_file,output_file,class_mask,field):
+def reclassify_raster(input_band,reclass_operation_list):
     
-    '''
-    ###################################################################################################################
-    Mask the desired class from classification results
-
-    Author: Daniele De Vecchi
-    Last modified: 13.05.2013
-
-    Input:
-     - classification_file: path and name of the file containing the classification results (raster or shapefile)
-     - output_file: path and name of the output file with the desired class (raster or shapefile)
-     - class_mask: number related to the desired class
-     - field: field containing the class values
+    '''Reclassify results of a classification according to the operation list
     
-    Output:
-     An output file (raster or shapefile depending on the input) is created containg the desired class only.
-    ###################################################################################################################
+    :param input_band: 2darray corresponding to single classification band (numpy array)
+    :param reclass_operation_list: list of operations to apply (e.g. '0,1,2,3 = 0') (list of strings)
+    :returns:  an output 2darray is created with the results of the reclassification process
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 24/03/2014
     '''
     
-    #TODO: do we need this function? It is just a simple select query isn't it?
+    mask = np.zeros(input_band.shape)
+    for l in range(0,len(reclass_operation_list)):
+        desired_classes,output_class = reclass_operation_list[l].split('=')
+        class_list = desired_classes.split(',')
+        
+        for c in range(0,len(class_list)):
+            print int(class_list[c])
+            mask = np.logical_or(np.equal(input_band,int(class_list[c])),mask)
+        output_band = np.choose(mask,(0,int(output_class)))  
+    return output_band 
     
-    if classification_file[-4:] == '.shp':
-        print 'Input: shapefile'
-        
-        driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
-        infile=driver_shape.Open(classification_file)
-        inlayer=infile.GetLayer()
-        outfile=driver_shape.CreateDataSource(output_file)
-        outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
-        
-        layer_defn = inlayer.GetLayerDefn()
-        infeature = inlayer.GetNextFeature()
-        feature_def = outlayer.GetLayerDefn()
-        dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
-        class_def = osgeo.ogr.FieldDefn('Class',osgeo.ogr.OFTInteger)
-        area_def = osgeo.ogr.FieldDefn('Area',osgeo.ogr.OFTReal)
-        
-        outlayer.CreateField(dn_def)
-        outlayer.CreateField(class_def)
-        outlayer.CreateField(area_def)
-        
-        n_feature = inlayer.GetFeatureCount()
-        j = 1
-        while infeature:
-            print str(j) + ' of ' + str(n_feature)
-            j = j+1
-            try:
-                dn = infeature.GetField('DN')
-            except:
-                dn = 0
-            class_value = infeature.GetField(field)
-            if class_value == class_mask:
-                # get the input geometry
-                geom = infeature.GetGeometryRef()
-                area = geom.Area()
-                # create a new feature
-                outfeature = osgeo.ogr.Feature(feature_def)
-                # set the geometry and attribute
-                outfeature.SetGeometry(geom)
+
+def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list):
+    
+    '''Extract a subset of the input shapefile according to the specified attribute field and list of values
+    
+    :param input_shape: path and name of the input shapefile (*.shp) (string)
+    :param output_shape: path and name of the output shapefile (*.shp) (string)
+    :param desired_field: name of the attribute field to filter (string)
+    :param desired_value_list: list of values to extract (e.g. [0,1,2,3]) (list of integers or floats or strings)
+    :returns:  an output shapefile is created as a subset of the original shapefile
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 24/03/2014
+    '''
+
+    driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    infile=driver_shape.Open(input_shape)
+    inlayer=infile.GetLayer()
+    
+    outfile=driver_shape.CreateDataSource(output_shape)
+    outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
+    
+    layer_defn = inlayer.GetLayerDefn()
+    field_names = [layer_defn.GetFieldDefn(j).GetName() for j in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
+    infeature = inlayer.GetNextFeature()
+    feature_def = outlayer.GetLayerDefn()
+    for j in range(0,len(field_names)):
+        field = infeature.GetFieldDefnRef(field_names[j])
+        outlayer.CreateField(field)
+    
+    n_feature = inlayer.GetFeatureCount()
+    while infeature:
+        attr_value = infeature.GetField(desired_field)
+        if attr_value in desired_value_list:
+            # get the input geometry
+            geom = infeature.GetGeometryRef()
+            # create a new feature
+            outfeature = osgeo.ogr.Feature(feature_def)
+            # set the geometry and attribute
+            outfeature.SetGeometry(geom)
+            
+            for j in range(0,len(field_names)):
+                field = infeature.GetFieldDefnRef(field_names[j])
+                outfeature.SetField(field_names[j],infeature.GetField(field_names[j]))
                 
-                outfeature.SetField('DN',dn)
-                outfeature.SetField('Class',class_value)
-                outfeature.SetField('Area',area)
-                outlayer.CreateFeature(outfeature)
-                outfeature.Destroy() 
-            infeature = inlayer.GetNextFeature()
-        
-        # close the shapefiles
-        infile.Destroy()
-        outfile.Destroy()    
-        
-        shutil.copyfile(classification_file[:-4]+'.prj', output_file[:-4]+'.prj')
+            outlayer.CreateFeature(outfeature)
+            outfeature.Destroy() 
+        infeature = inlayer.GetNextFeature()
     
-    else:
-        print 'Input: Raster'
-        
-        rows,cols,nbands,band_list,geotransform,projection = Read_Image(classification_file,np.uint16)
-        mask = np.equal(band_list[0],class_mask)
-        
-        out_list = []
-        out_list.append(mask)
-        WriteOutputImage(classification_file,'','',output_file,cols,rows,0,len(out_list),out_list)
+    # close the shapefiles
+    infile.Destroy()
+    outfile.Destroy()    
+    
+    shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj')

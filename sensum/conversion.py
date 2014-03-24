@@ -237,7 +237,67 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_ma
         
     return x_min,x_max,y_min,y_max
 
+
+def polygon2array(input_layer,output_band,geo_transform): 
     
+    '''Conversion from polygon to array
+    
+    :param input_shape: path and name of the input shapefile (*.shp) (string)
+    :param output_raster: path and name of the output raster to create (*.TIF, *.tiff) (string)
+    :param rows: rows of the output raster (integer)
+    :param cols: columns of the output raster (integer)
+    :param field_name: name of the attribute field of the shapefile used to differentiate pixels (string)
+    :param 
+    :returns: An output file is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 24/03/2014
+    
+    Reference: http://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html
+    '''
+    
+    x_list = []
+    y_list = []
+    x_min, x_max, y_min, y_max = input_layer.GetExtent()
+    '''
+    ring = input_polygon.GetGeometryRef(0)
+    n_vertex = ring.GetPointCount()
+    
+    for i in range(0,n_vertex-1):
+        lon,lat,z = ring.GetPoint(i)
+        x_matrix,y_matrix = world2pixel(geo_transform,lon,lat)
+        x_list.append(x_matrix)
+        y_list.append(y_matrix)
+    
+    x_list.sort()
+    x_min = x_list[0]
+    y_list.sort()
+    y_min = y_list[0]
+    x_list.sort(None, None, True)
+    x_max = x_list[0]
+    y_list.sort(None, None, True)
+    y_max = y_list[0]
+    
+    lon_min = float(x_min*geo_transform[1]+geo_transform[0]) 
+    lat_min = float(geo_transform[3]+y_min*geo_transform[5])
+    # Create the destination data source
+    '''
+    x_res = int((x_max - x_min) / geo_transform[1])
+    y_res = int((y_max - y_min) / abs(geo_transform[5]))
+    target_ds = osgeo.gdal.GetDriverByName('MEM').Create('', x_res, y_res, GDT_Byte)
+    target_ds.SetGeoTransform((x_min, geo_transform[1], 0, y_max, 0, geo_transform[5]))
+    band = target_ds.GetRasterBand(1)
+    
+    # Rasterize
+    osgeo.gdal.RasterizeLayer(target_ds, [1], input_layer, burn_values=[1])
+    
+    # Read as array
+    array = band.ReadAsArray()
+    
+    return array
+
+
 def rast2shp(input_raster,output_shape):
     
     '''Conversion from raster to shapefile using GDAL
@@ -350,3 +410,92 @@ def utm2wgs84(easting, northing, zone):
     # create transform component
     utm_to_wgs84_geo_transform = osgeo.osr.CoordinateTransformation(utm_coordinate_system, wgs84_coordinate_system) # (, )
     return utm_to_wgs84_geo_transform.TransformPoint(easting, northing, 0) # returns lon, lat, altitude
+
+
+def reproject_shapefile(input_shape,output_shape,output_projection):
+    
+    '''Reproject a shapefile using the provided EPSG code
+    
+    :param input_shape: path and name of the input shapefile (*.shp) (string)
+    :param output_shape: path and name of the output shapefile (*.shp) (string)
+    :param output_projection: epsg code (integer)
+    :param geometry_type: geometry type of the output ('line','polygon','point') (string)
+    :returns:  an output shapefile is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 24/03/2014
+    ''' 
+
+    #TODO: It seems that you transform from a default epsg 4326 and don't allow to define the input or simply read it from the input file
+    #TODO: would use only one argument to define input. 
+    #driver definition for shapefile
+    driver=osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    
+    #select input file and create an output file
+    infile=driver.Open(input_shape,0)
+    inlayer=infile.GetLayer()
+    inprj = inlayer.GetSpatialRef()
+    if inprj == None:
+        inprj = 4326
+    
+    outprj=osgeo.osr.SpatialReference()
+    outprj.ImportFromEPSG(output_projection)
+    
+    newcoord=osgeo.osr.CoordinateTransformation(inprj,outprj)
+    
+    feature=inlayer.GetNextFeature()
+    gm = feature.GetGeometryRef()
+    geometry_type = gm.GetGeometryName() 
+
+    if geometry_type == 'LINE':
+        type = osgeo.ogr.wkbLineString
+    if geometry_type == 'POLYGON':
+        type = osgeo.ogr.wkbPolygon
+    if geometry_type == 'POINT':
+        type = osgeo.ogr.wkbPoint 
+    outfile=driver.CreateDataSource(output_shape)
+    outlayer=outfile.CreateLayer('rpj',geom_type=type)
+    
+    layer_defn = inlayer.GetLayerDefn() #get definitions of the layer
+    field_names = [layer_defn.GetFieldDefn(i).GetName() for i in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
+    #print field_names
+    for i in range(0,len(field_names)):
+        field = feature.GetFieldDefnRef(field_names[i])
+        outlayer.CreateField(field)
+        
+    # get the FeatureDefn for the output shapefile
+    feature_def = outlayer.GetLayerDefn()
+    inlayer.ResetReading()
+    # loop through the input features
+    infeature = inlayer.GetNextFeature()
+    while infeature:
+        # get the input geometry
+        geom = infeature.GetGeometryRef()
+        # reproject the geometry
+        geom.Transform(newcoord)
+        # create a new feature
+        outfeature = osgeo.ogr.Feature(feature_def)
+        # set the geometry and attribute
+        outfeature.SetGeometry(geom)
+        #field_names = [layer_defn.GetFieldDefn(i).GetName() for i in range(layer_defn.GetFieldCount())]
+        for i in range(0,len(field_names)):
+            #print infeature.GetField(field_names[i])
+            outfeature.SetField(field_names[i],infeature.GetField(field_names[i]))
+            # add the feature to the shapefile
+        outlayer.CreateFeature(outfeature)
+
+        # destroy the features and get the next input feature
+        outfeature.Destroy
+        infeature.Destroy
+        infeature = inlayer.GetNextFeature()
+
+    # close the shapefiles
+    infile.Destroy()
+    outfile.Destroy()
+
+    # create the *.prj file
+    outprj.MorphToESRI()
+    prjfile = open(output_shape[:-4]+'.prj', 'w')
+    prjfile.write(outprj.ExportToWkt())
+    prjfile.close()

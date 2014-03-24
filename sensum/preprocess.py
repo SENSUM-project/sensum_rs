@@ -136,7 +136,7 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     datasource.Destroy()
     
 
-def merge(input_raster_list,output_raster,data_type):
+def layer_stack(input_raster_list,output_raster,data_type):
     
     '''Merge single-band files into one multi-band file
     
@@ -159,7 +159,7 @@ def merge(input_raster_list,output_raster,data_type):
     write_image(final_list,data_type,0,output_raster,rows,cols,geo_transform,projection) #write the list to output file
     
     
-def split(input_raster,band_selection,data_type):
+def layer_split(input_raster,band_selection,data_type):
     
     '''Split a multi-band input file into single-band files
     

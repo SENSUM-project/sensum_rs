@@ -135,7 +135,7 @@ def pca_index(pca_mean,pca_mode,pca_sec_order,pca_third_order):
     
     :param pca_mean: matrix with mean computed by pca (numpy array)
     :param pca_mode: matrix with mode computed by pca (numpy array)
-    :param pca_second_order:matrix with second order component computed by pca (numpy array)
+    :param pca_second_order: matrix with second order component computed by pca (numpy array)
     :param pca_third_order: matrix with third order component computed by pca (numpy array)
     :returns:  a matrix with the pca built-up indicator
     :raises: AttributeError, KeyError
