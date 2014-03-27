@@ -63,7 +63,7 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     #TODO: would use only one argument to define input image and one to define input shp.
         
     #os.system('gdalwarp -q -cutline ' + shapefile + ' -crop_to_cutline -of GTiff ' + path + name +' '+ path + name[:-4] + '_city.TIF')
-    #new command working on fwtools, used just / for every file
+
     x_list = []
     y_list = []
     # get the shapefile driver
@@ -102,7 +102,7 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
         # destroy the feature and get a new one
         feature.Destroy()
         feature = layer.GetNextFeature()
-    
+    #regularize the shape
     x_list.sort()
     x_min = x_list[0]
     y_list.sort()
@@ -185,12 +185,13 @@ def layer_split(input_raster,band_selection,data_type):
         write_image(band_list,data_type,band_selection,input_raster[:-4]+'_B'+str(band_selection)+'.TIF',rows,cols,geo_transform,projection)  
     
 
-def gcp_extraction(input_band_ref,input_band,output_option):
+def gcp_extraction(input_band_ref,input_band,ref_geo_transform,output_option):
     
     '''GCP extraction and filtering using the SURF algorithm
     
     :param input_band_ref: 2darray byte format (numpy array) (unsigned integer 8bit)
     :param input_band: 2darray byte format (numpy array) (unsigned integer 8bit)
+    :param ref_geo_transform: geomatrix related to the reference image
     :param output_option: 0 for indexes, 1 for coordinates (default 0) (integer)
     :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
     :returns:  an output file is created for single-band
@@ -234,6 +235,7 @@ def gcp_extraction(input_band_ref,input_band,output_option):
     
     i=0
     points=np.zeros(shape=(len(sel_matches),4))
+    points_coordinates = np.zeros(shape=(len(sel_matches),4)).astype(np.float32)
     for m in sel_matches:
         #matrix containing coordinates of the matching points
         points[i][:]= [int(k1[m.queryIdx].pt[0]),int(k1[m.queryIdx].pt[1]),int(k2[m.trainIdx].pt[0]),int(k2[m.trainIdx].pt[1])]
@@ -243,8 +245,12 @@ def gcp_extraction(input_band_ref,input_band,output_option):
     #print 'Feature Extraction - Done'
     if output_option == None or output_option == 0:
         return points #return indexes
-    else:
-        return pixel2world(points) #modify pixel2world function
+    else: #conversion to coordinates
+        for j in range(0,len(points)):
+            lon_ref,lat_ref = pixel2world(ref_geo_transform, points[j][0], points[j][1])
+            lon_tg,lat_tg = pixel2world(ref_geo_transform, points[j][2], points[j][3]) #check how the gdal correction function works
+            points_coordinates[j][:] = [lon_ref,lat_ref,lon_tg,lat_tg]
+        return points_coordinates 
 
 
 def linear_offset_comp(common_points):
@@ -295,7 +301,8 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
  
     scale_rows = round(float(rowsp)/float(rowsxs),4)
     scale_cols = round(float(colsp)/float(colsxs),4)
-   
+    
+    #Resampling
     RigidTransformResample = otbApplication.Registry.CreateApplication("RigidTransformResample") 
     # The following lines set all the application parameters: 
     RigidTransformResample.SetParameterString("in", input_raster_multiband) 

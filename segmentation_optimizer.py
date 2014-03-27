@@ -5,57 +5,65 @@ adjusted to new package structure by marc
 '''
 
 from sensum.segmentation import *
-from sensum.conversion import Shp2Rast
-from sensum.misc import split_shape
+from sensum.conversion import *
+from sensum.segmentation_opt import *
+from sensum.misc import *
 import osgeo.ogr
 
 ## Parameters ##########################################################################
-input_image = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/pansharp.TIF" #original image
-input_shape = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/reference_polygon_2.shp" #reference polygon
-path = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/"
+input_image = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\pansharp.TIF" #original image
+input_shape = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\reference_polygon_2.shp" #reference polygon
+path = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\"
 
-segmentation_name = 'Meanshift'
+segmentation_name = 'Watershed'
 nloops = 10
 select_criteria = 4 #default value, combination of extra and intra region pixels
 ########################################################################################
 
-vector_folder = path
-print vector_folder
-rows,cols,nbands,geo_transform,projection=Read_Image_Parameters(input_image)
-
-#Split reference shapefile into different files
-print 'split_shape'
-split_shape(vector_folder,input_shape)
-
-Polygon_Folder = vector_folder + 'separated_ref_objs\\vectors\\'
-os.chdir(path)
-driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
-
-if os.path.isdir('separated_ref_objs\\rasters\\'):
-    shutil.rmtree('separated_ref_objs\\rasters\\')
-os.makedirs('separated_ref_objs\\rasters')
-os.chdir(Polygon_Folder)
-Polygon_Files = glob.glob('*.shp')    
-
-#Convert shapefiles to rasters
-for j in range(1,len(Polygon_Files)+1):
-    print j
-    outfile= path +  'separated_ref_objs\\rasters\\' + 'sing_rast_' + str(j) + '.TIF'
-    inshape = path + 'separated_ref_objs\\vectors\\' + 'sing_poly_' + str(j) + '.shp'
-    print outfile
+band_list = read_image(input_image,np.uint16,0)
+rows,cols,nbands,geo_transform,projection = read_image_parameters(input_image)
+#Open reference shapefile
+driver_shape = osgeo.ogr.GetDriverByName('ESRI Shapefile')
     
-    pixelWidth = geo_transform[1]
-    print 'pixelWidth: ' + str(pixelWidth)
-    pixelHeight = geo_transform[5]
-    print 'pixelHeight: ' + str(pixelHeight)
-    Shp2Rast(inshape,outfile,0,0,'conv',pixelWidth,pixelHeight,0,0,0,0)
+inDS = driver_shape.Open(input_shape, 0)
+if inDS is None:
+    print 'Could not open file'
+    sys.exit(1)
+inLayer = inDS.GetLayer()
+numFeatures = inLayer.GetFeatureCount()
+print 'Number of reference features: ' + str(numFeatures)
+temp_shape = input_shape[:-4]+'_temp.shp'
+patches_list = []
+patches_geo_transform_list = []
+reference_list = []
+ref_geo_transform_list = []
+
+for n in range(0,numFeatures):
     
-#Create an extended version of the original raster
-print 'Create extended patches'
-print len(Polygon_Files)
-reg_seg_crit(input_image,path,len(Polygon_Files))
+    #separate each polygon creating a temp file
+    split_shape(inLayer,temp_shape,n)
+    
+    #conversion of the temp file to raster
+    temp = driver_shape.Open(temp_shape, 0)
+    temp_layer = temp.GetLayer()
+    
+    reference_matrix, ref_geo_transform = polygon2array(temp_layer,geo_transform[1],abs(geo_transform[5])) 
+    driver_shape.DeleteDataSource(temp_shape)
+    reference_list.append(reference_matrix)
+    ref_geo_transform_list.append(ref_geo_transform)
+    
+    ext_patch_list,patch_geo_transform = create_extended_patch(band_list,reference_matrix,geo_transform,ref_geo_transform,0.3,False)
+    patches_list.append(ext_patch_list)
+    patches_geo_transform_list.append(patch_geo_transform)
+    
+e = call_optimizer(segmentation_name,patches_list,reference_list,patches_geo_transform_list,ref_geo_transform_list,projection,select_criteria,nloops)
 
-input_folder = path  + 'ext_patches\\' #do not change
-input_folder_reference = path + 'separated_ref_objs\\rasters\\' #do not change
-
-e = call_optimizer(segmentation_name,input_folder,input_folder_reference,nloops,select_criteria)
+#Clean memory
+reference_list = []
+ref_geo_transform_list = []
+patches_list = []
+ext_patch_list = []
+patches_geo_transform_list = []
+reference_matrix = None
+ref_geo_transform = None
+patch_geo_transform = None

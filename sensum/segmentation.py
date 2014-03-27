@@ -48,6 +48,9 @@ if os.name == 'posix':
 else:
     separator = '\\'
 
+temp_folder_interimage = 'F:\Sensum_xp\Izmir\Applications\\tmpfolder'
+exe_folder_interimage = 'F:\Sensum_xp\Izmir\Applications\seg_exec'
+
 
 def felzenszwalb_skimage(input_band_list, scale, sigma, min_size):
    
@@ -117,13 +120,11 @@ def quickshift_skimage(input_band_list,kernel_size, max_distance, ratio):
     return segments_quick
 
 
-def baatz_interimage(input_raster,temp_folder,exe_folder,euc_threshold,compactness,baatz_color,scale,index):#,input_bands,input_weights,output folder,reliability):
+def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,index):#,input_bands,input_weights,output folder,reliability):
     
     '''Baatz segmentation from InterImage/TerraAIDA library
     
     :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
-    :param temp_folder: path of the folder that will contain temporary files (string)
-    :param exe_folder: path of the folder containing the exe files (string)
     :param euc_threshold: euclidean distance threshold. The minimum Euclidean Distance between each segment feature. (float, positive)
     :param compactness: Baatz Compactness Weight attribute (float, between 0 and 1)
     :param baatz_color: Baatz Color Weight attribute (float, between 0 and 1)
@@ -169,16 +170,16 @@ def baatz_interimage(input_raster,temp_folder,exe_folder,euc_threshold,compactne
     GE= a[0]
     GS= a[1]
     
-    output_file = temp_folder + separator +'baatz_' +  str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) + '_' + str(index) + '.plm'
+    output_file = temp_folder_interimage + separator +'baatz_' +  str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) + '_' + str(index) + '.plm'
     
     #removing the file created by the segmenter after each run
-    Folder_files = os.listdir(temp_folder)
+    Folder_files = os.listdir(temp_folder_interimage)
     file_ = [s for s in Folder_files if "ta_segmenter" in s]
     if file_:
-        os.remove(temp_folder+separator+file_[0])
-    exe_file =  exe_folder +separator+ 'ta_baatz_segmenter.exe'   
+        os.remove(temp_folder_interimage+separator+file_[0])
+    exe_file =  exe_folder_interimage +separator+ 'ta_baatz_segmenter.exe'   
     #runs the baatz segmenter
-    os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder+'" "" Baatz "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
+    os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder_interimage+'" "" Baatz "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
 
     #removing the raw file if existed
     if os.path.exists(output_file + '.raw'):
@@ -203,14 +204,14 @@ def baatz_interimage(input_raster,temp_folder,exe_folder,euc_threshold,compactne
     return segments_baatz
 
 
-def region_growing_interimage(input_raster,temp_folder,exe_folder,euc_threshold,compactness,baatz_color,scale,index):#,input_bands,input_weights,output folder,reliability)
+def region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,index):#,input_bands,input_weights,output folder,reliability)
     
     '''Region growing segmentation from InterImage/TerraAIDA library
     
     :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
     :param temp_folder: path of the folder that will contain temporary files (string)
     :param exe_folder: path of the folder containing the exe files (string)
-    :param euc_threshold: euclidean distance threshold. The minimum Euclidean Distance between each segment feature. (float, positive)
+    :param euc_threshold: Euclidean distance threshold. The minimum Euclidean Distance between each segment feature. (float, positive)
     :param compactness: Baatz Compactness Weight attribute (float, between 0 and 1)
     :param baatz_color: Baatz Color Weight attribute (float, between 0 and 1)
     :param scale: Baatz scale attribute (float, positive)
@@ -252,19 +253,19 @@ def region_growing_interimage(input_raster,temp_folder,exe_folder,euc_threshold,
     #print a[0], a[1]
     GE= a[0]
     GS= a[1]
-    output_file = temp_folder + separator +'regiongrowing_' + str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) +'.plm'
+    output_file = temp_folder_interimage + separator +'regiongrowing_' + str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) +'.plm'
     
     #removing the changing name file created by the segmenter after each run
-    Folder_files = os.listdir(temp_folder)
+    Folder_files = os.listdir(temp_folder_interimage)
     file_ = [s for s in Folder_files if "ta_segmenter" in s]
     if file_:
-        os.remove(temp_folder+separator+file_[0])
+        os.remove(temp_folder_interimage+separator+file_[0])
         
-    exe_file =  exe_folder +separator+ 'ta_regiongrowing_segmenter.exe'   
+    exe_file =  exe_folder_interimage +separator+ 'ta_regiongrowing_segmenter.exe'   
     
     
     #runs the regiongrowing segmenter
-    os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder+'" "" RegionGrowing "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
+    os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder_interimage+'" "" RegionGrowing "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
 
     #removing the raw file if existed
     if os.path.isfile(output_file + '.raw'):

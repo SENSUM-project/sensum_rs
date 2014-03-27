@@ -35,7 +35,7 @@ import cv2
 from skimage.feature import greycomatrix
 from skimage.feature import greycoprops
 from sensum.conversion import *
-from sensum.classification import unsupervised_classification
+from sensum.classification import *
 
 if os.name == 'posix':
     separator = '/'
@@ -240,7 +240,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
 
     ystart = np.amin(seg_pos[0])
     yend = np.amax(seg_pos[0])
-    data_glcm = np.zeros((yend-ystart+1,xend-xstart+1)) 
+    #data_glcm = np.zeros((yend-ystart+1,xend-xstart+1)) 
     data_glcm = input_band[ystart:yend+1,xstart:xend+1] #TODO: is this redefinition intended?
     
     glcm = greycomatrix(data_glcm, [1], [0], levels=256, symmetric=False, normed=True)
@@ -253,7 +253,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
 
 def texture_moving_window(input_band_list,window_dimension,index,quantization_factor):
     
-    '''Compute the desired spectral features from each segment
+    '''Compute the desired spectral feature from each window
     
     :param input_band_list: list of 2darrays (list of numpy arrays)
     :param window_dimension: dimension of the processing window (integer)
@@ -272,25 +272,25 @@ def texture_moving_window(input_band_list,window_dimension,index,quantization_fa
     
     band_list_q = []
     output_list = []
-    #result_step = int(window_dimension/2)
     
+    #Quantization process
     q_factor = quantization_factor - 1 
     for b in range(0,len(input_band_list)):
         inmatrix = input_band_list[b].reshape(-1)
-        out = np.bincount(inmatrix) 
+        out = np.bincount(inmatrix)
         tot = inmatrix.shape[0]
-        freq = (out.astype(np.float32)/float(tot))*100
+        freq = (out.astype(np.float32)/float(tot))*100 #frequency for each value
         cumfreqs = np.cumsum(freq)
     
-        first = np.where(cumfreqs>1.49)[0][0] #define occurency limits for the distribution
+        first = np.where(cumfreqs>1.49)[0][0] #define occurrence limits for the distribution
         last = np.where(cumfreqs>97.8)[0][0]
         input_band_list[b][np.where(input_band_list[b]>last)] = last
         input_band_list[b][np.where(input_band_list[b]<first)] = first
  
         #max_matrix = np.ones(input_band_list[0].shape)*np.amax(input_band_list[b])
         #q_matrix = np.ones(input_band_list[0].shape)*q_factor
-        k1 = float(q_factor)/float((last-first))
-        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape)
+        k1 = float(q_factor)/float((last-first)) #k1 term of the quantization formula
+        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape) #k2 term of the quantization formula
         out_matrix = np.floor(input_band_list[b]*k1+k2) #take the integer part
         out_matrix2 = out_matrix-np.ones(out_matrix.shape)
         out_matrix2.astype(np.uint8)
@@ -316,13 +316,13 @@ def texture_moving_window(input_band_list,window_dimension,index,quantization_fa
         print str(i+1)+' of '+str(rows_w)
         for j in range(0,cols_w):
             for b in range(0,len(input_band_list)):
-                data_glcm_1 = band_list_q[0][i:i+window_dimension,j:j+window_dimension]
+                data_glcm_1 = band_list_q[0][i:i+window_dimension,j:j+window_dimension] #extract the data for the glcm
             
                 if (i+window_dimension<rows_w) and (j+window_dimension<cols_w):
                     glcm1 = greycomatrix(data_glcm_1, [1], [0, np.pi/4, np.pi/2, np.pi*(3/4)], levels=quantization_factor, symmetric=False, normed=True)
                     feat1 = greycoprops(glcm1, index)[0][0]
-                    index_row = i+1
-                    index_col = j+1
+                    index_row = i+1 #window moving step
+                    index_col = j+1 #window moving step
                     
                     output_ft_1[b][index_row][index_col]=float(feat1) #stack to store the results for different bands
                 

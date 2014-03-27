@@ -79,7 +79,7 @@ def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     :param input_band_list: list of 2darrays corresponding to bands (band 1: blue) (list of numpy arrays)
     :param n_classes: number of classes to extract (integer)
     :param n_iterations: number of iterations of the classifier (integer)
-    :returns:  an output matrix is created with the results of the classifier
+    :returns:  an output 2darray is created with the results of the classifier
     :raises: AttributeError, KeyError
     
     Author: Daniele De Vecchi - Mostapha Harb
@@ -91,8 +91,8 @@ def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     
     Z = np.float32(Z) #convert to np.float32
     criteria = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, n_iterations, 0.0001) #definition of the criteria
-    ret,label,center=cv2.kmeans(Z,n_classes,criteria,n_iterations,cv2.KMEANS_RANDOM_CENTERS)
-    center = np.uint8(center)
+    ret,label,center=cv2.kmeans(Z,n_classes,criteria,n_iterations,cv2.KMEANS_RANDOM_CENTERS) #kmeans classification
+    center = np.uint8(center) 
     res = center[label.flatten()]
     res2 = res[:,0] #extraction of the desired row
     output_array = res2.reshape(input_band_list[0].shape) #reshape to original raster dimensions
@@ -100,12 +100,12 @@ def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     return output_array
     
     
-def train_classifier(input_raster,input_shape,output_txt,classification_type,training_field):
+def train_classifier(input_raster_list,input_shape_list,output_txt,classification_type,training_field):
     
     '''Training of the desired classifier using OTB library
     
-    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
-    :param input_shape: path and name of the input shapefile containing the training set (*.TIF,*.tiff) (string)
+    :param input_raster_list: list of paths and names of the input raster files (*.TIF,*.tiff) (list of strings)
+    :param input_shape_list: list of paths and names of the input shapefiles containing the training sets (*.TIF,*.tiff) (list of strings)
     :param output_txt: path and name of text file with the training parameters (*.txt) (string)
     :param classification type: definition of the desired classification algorithm ('libsvm','svm','dt','gbt','bayes','rf','knn') (string)
     :param training_field: name of the discriminant attribute in the training shapefile (string)
@@ -118,12 +118,13 @@ def train_classifier(input_raster,input_shape,output_txt,classification_type,tra
     Reference: http://orfeo-toolbox.org/CookBook/CookBooksu118.html#x152-8600005.8.8
     '''
     root = ET.Element("FeatureStatistics")
-    #XML file creation as input for OTB
-    print len(input_raster)
     
-    for i in range(0,len(input_raster)):
-        rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster[i])
-        band_list = read_image(input_raster[i],np.uint16,0)
+    #XML file creation as input for OTB
+    print 'Number of provided raster files: ' + str(len(input_raster_list))
+    
+    for i in range(0,len(input_raster_list)):
+        rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster_list[i])
+        band_list = read_image(input_raster_list[i],np.uint16,0)
         statistic = ET.SubElement(root,"Statistic")
         statistic.set("name","mean")
         for b in range(0,nbands):
@@ -131,8 +132,8 @@ def train_classifier(input_raster,input_shape,output_txt,classification_type,tra
             statistic_vector.set("value",str(round(np.mean(band_list[b]),4)))
       
           
-    for i in range(0,len(input_raster)):
-        band_list = read_image(input_raster[i],np.uint16,0)
+    for i in range(0,len(input_raster_list)):
+        band_list = read_image(input_raster_list[i],np.uint16,0)
         statistic = ET.SubElement(root,"Statistic")
         statistic.set("name","stddev")
         for b in range(0,nbands):
@@ -140,15 +141,15 @@ def train_classifier(input_raster,input_shape,output_txt,classification_type,tra
             statistic_vector.set("value",str(round(np.std(band_list[b])/2,4)))
         
     tree = ET.ElementTree(root)
-    tree.write(input_raster[0][:-4]+'_statistics.xml')
+    tree.write(input_raster_list[0][:-4]+'_statistics.xml')
     
     #OTB Train Classifier
     TrainImagesClassifier = otbApplication.Registry.CreateApplication("TrainImagesClassifier") 
      
     # The following lines set all the application parameters: 
-    TrainImagesClassifier.SetParameterStringList("io.il", input_raster) 
-    TrainImagesClassifier.SetParameterStringList("io.vd", input_shape) 
-    TrainImagesClassifier.SetParameterString("io.imstat", input_raster[0][:-4]+'_statistics.xml') 
+    TrainImagesClassifier.SetParameterStringList("io.il", input_raster_list) 
+    TrainImagesClassifier.SetParameterStringList("io.vd", input_shape_list) 
+    TrainImagesClassifier.SetParameterString("io.imstat", input_raster_list[0][:-4]+'_statistics.xml') 
     TrainImagesClassifier.SetParameterInt("sample.mv", 100) 
     TrainImagesClassifier.SetParameterInt("sample.mt", 100) 
     TrainImagesClassifier.SetParameterFloat("sample.vtr", 0.5) 
@@ -223,12 +224,12 @@ def class_to_segments(input_raster,input_shape,output_shape):
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 23/03/2014
     '''
-    
+    #Example of hybrid approach
     #TODO: this is only a spatial union operation, isn't it? So it is not part of the hybrid approach where you aggregate pixel classes to segments!?
     rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
-    band_list_class = read_image(input_raster,np.int32,0)
+    band_list_class = read_image(input_raster,np.int32,0) #read original raster file
     shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
-    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32)
+    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32) #read segmentation raster file
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     infile=driver_shape.Open(input_shape)
@@ -260,9 +261,10 @@ def class_to_segments(input_raster,input_shape,output_shape):
         outfeature = osgeo.ogr.Feature(feature_def)
         # set the geometry and attribute
         outfeature.SetGeometry(geom)
-        seg_pos = np.where(band_list_seg[0] == dn)
+        seg_pos = np.where(band_list_seg[0] == dn) #returns a list of x and y coordinates related to the pixels satisfying the given condition
         mat_pos = np.zeros(len(seg_pos[0]))
         
+        #Extract all the pixels inside a segment
         for l in range(0,len(seg_pos[0])):
             mat_pos[l] = band_list_class[0][seg_pos[0][l]][seg_pos[1][l]]
         
@@ -280,7 +282,7 @@ def class_to_segments(input_raster,input_shape,output_shape):
     infile.Destroy()
     outfile.Destroy()    
     
-    shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj')
+    shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj') #projection definition
     
 
 def confusion_matrix(input_raster,input_shape,reference_field,output_file):    
@@ -327,11 +329,11 @@ def reclassify_raster(input_band,reclass_operation_list):
     
     mask = np.zeros(input_band.shape)
     for l in range(0,len(reclass_operation_list)):
-        desired_classes,output_class = reclass_operation_list[l].split('=')
+        desired_classes,output_class = reclass_operation_list[l].split('=') #decomposition of the input formula
         class_list = desired_classes.split(',')
         
         for c in range(0,len(class_list)):
-            print int(class_list[c])
+            #print int(class_list[c])
             mask = np.logical_or(np.equal(input_band,int(class_list[c])),mask)
         output_band = np.choose(mask,(0,int(output_class)))  
     return output_band 
@@ -366,11 +368,10 @@ def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list
     for j in range(0,len(field_names)):
         field = infeature.GetFieldDefnRef(field_names[j])
         outlayer.CreateField(field)
-    
-    n_feature = inlayer.GetFeatureCount()
+
     while infeature:
         attr_value = infeature.GetField(desired_field)
-        if attr_value in desired_value_list:
+        if attr_value in desired_value_list: #check if the record satisfyies the input condition
             # get the input geometry
             geom = infeature.GetGeometryRef()
             # create a new feature

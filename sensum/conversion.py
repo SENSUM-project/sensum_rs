@@ -53,7 +53,7 @@ def data_type2gdal_data_type(data_type):
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 18/03/2014
     ''' 
-    
+    #Function needed when it is necessary to write an output file
     if data_type == np.uint16:
         return GDT_UInt16
     if data_type == np.uint8:
@@ -72,7 +72,7 @@ def read_image(input_raster,data_type,band_selection):
     
     :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string).
     :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type).
-    :param band_selection: number associated with the band to extract (0: all bands, 1: blue, 2: greeen, 3:red, 4:infrared) (integer).
+    :param band_selection: number associated with the band to extract (0: all bands, 1: blue, 2: green, 3:red, 4:infrared) (integer).
     :returns:  a list containing the desired bands as ndarrays (list of arrays).
     :raises: AttributeError, KeyError
     
@@ -85,7 +85,7 @@ def read_image(input_raster,data_type,band_selection):
     #TODO: Is this the general function to make rasters available to functions? How do you deal with GDAL to OpenCV matrices?
     band_list = []
     
-    if data_type == 0: #most of the images (MR and HR) can be read as unsigned int 16
+    if data_type == 0: #most of the images (MR and HR) can be read as uint16
         data_type = np.uint16
         
     inputimg = osgeo.gdal.Open(input_raster, GA_ReadOnly)
@@ -155,6 +155,7 @@ def write_image(band_list,data_type,band_selection,output_raster,rows,cols,geo_t
         gdal_data_type = GDT_UInt16 #default data type
     else:
         gdal_data_type = data_type2gdal_data_type(data_type)
+    
     driver = osgeo.gdal.GetDriverByName('GTiff')
 
     if band_selection == 0:
@@ -181,7 +182,7 @@ def write_image(band_list,data_type,band_selection,output_raster,rows,cols,geo_t
     outDs = None
 
 
-def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_max,y_min,y_max):
+def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width,pixel_height,x_min,x_max,y_min,y_max):
     
     '''Conversion from shapefile to raster using GDAL
     
@@ -190,12 +191,19 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_ma
     :param rows: rows of the output raster (integer)
     :param cols: columns of the output raster (integer)
     :param field_name: name of the attribute field of the shapefile used to differentiate pixels (string)
-    :param 
-    :returns: An output file is created
+    :param pixel_width: pixel resolution x axis
+    :param pixel_height: pixel resolution y axis
+    :param x_min: minimum longitude (used for the geomatrix)
+    :param x_max: maximum longitude
+    :param y_min: minimum latitude
+    :param y_max: maximum latitude (used for the geomatrix)
+    :returns: An output file is created and a list with the shapefile extent is returned (x_min,x_max,y_min,y_max)
     :raises: AttributeError, KeyError
     
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 18/03/2014
+    
+    Reference: http://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html
     '''
   
     #TODO: Explain additional arguments px_W,px_H,x_min,x_max,y_min,y_max
@@ -204,21 +212,32 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_ma
     data_source = driver_shape.Open(input_shape)
     source_layer = data_source.GetLayer()
     source_srs = source_layer.GetSpatialRef()
-    if x_min==0 or x_max==0 or y_min==0 or y_max==0:
-        x_min, x_max, y_min, y_max = source_layer.GetExtent()
     
-    if rows!=0 and cols!=0 and px_W!=0 and px_H!=0 and x_min!=0 and y_max!=0:
-        pixel_size_x = px_W
-        pixel_size_y = abs(px_H)
+    '''
+    Conversion can be performed in 3 different ways according to the input shapefile:
+    - providing rows and columns only -> the pixel resolution is computed using the extent of the shapefile in combination with rows and cols
+        -> used when rows and columns are known and the shapefile extent is equal to the raster dimension
+    - providing pixel resolution (pixel_width and pixel_height) only -> number of rows and columns is computed using the resolution and the shapefile extent
+        -> used when it is necessary to force the same resolution, for example case of small subset of a raster
+    - providing rows,columns,pixel resolution and extent -> no computation needed, parameters directly assigned to the output raster (used to force dimensions)
+        -> used when you have to compare the shapefile with a raster but the actual extent of the shapefile is different because polygons are not touching the raster edges
+    '''
+    
+    if x_min==0 or x_max==0 or y_min==0 or y_max==0: #case of non provided extension
+        x_min, x_max, y_min, y_max = source_layer.GetExtent() #get the extent directly from the shapefile
+    
+    if rows!=0 and cols!=0 and pixel_width!=0 and pixel_height!=0 and x_min!=0 and y_max!=0: #case with rows, columns, pixel width and height and starting coordinates
+        pixel_size_x = pixel_width
+        pixel_size_y = abs(pixel_height)
         
     else:
-        if rows != 0 and cols != 0:
-            pixel_size_x = float((x_max-x_min)) / float(cols)
+        if rows != 0 and cols != 0: #case with rows and columns 
+            pixel_size_x = float((x_max-x_min)) / float(cols) #definition of the resolution depending on the extent and dimensions in pixels
             pixel_size_y = float((y_max-y_min)) / float(rows)
-        else:
-            pixel_size_x = px_W
-            pixel_size_y = abs(px_H)
-            cols = int(float((x_max-x_min)) / float(pixel_size_x))
+        else: #case with pixel resolution
+            pixel_size_x = pixel_width
+            pixel_size_y = abs(pixel_height)
+            cols = int(float((x_max-x_min)) / float(pixel_size_x)) #definition of the dimensions according to the extent and pixel resolution
             rows = int(float((y_max-y_min)) / float(pixel_size_y))
     if rows!=0 and cols!=0:    
         target_ds = osgeo.gdal.GetDriverByName('GTiff').Create(output_raster, cols,rows, 1, GDT_Float32)
@@ -238,55 +257,29 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,px_W,px_H,x_min,x_ma
     return x_min,x_max,y_min,y_max
 
 
-def polygon2array(input_layer,output_band,geo_transform): 
+def polygon2array(input_layer,pixel_width,pixel_height): 
     
     '''Conversion from polygon to array
     
-    :param input_shape: path and name of the input shapefile (*.shp) (string)
-    :param output_raster: path and name of the output raster to create (*.TIF, *.tiff) (string)
-    :param rows: rows of the output raster (integer)
-    :param cols: columns of the output raster (integer)
-    :param field_name: name of the attribute field of the shapefile used to differentiate pixels (string)
-    :param 
-    :returns: An output file is created
+    :param input_layer: layer taken from the shapefile (shapefile layer)
+    :param pixel_width: pixel resolution x axis (float, positive)
+    :param pixel_height: pixel resolution y axis (float, positive) 
+    :returns: A matrix with the output band and the related geomatrix
     :raises: AttributeError, KeyError
     
     Author: Daniele De Vecchi - Mostapha Harb
-    Last modified: 24/03/2014
+    Last modified: 25/03/2014
     
     Reference: http://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html
     '''
     
-    x_list = []
-    y_list = []
     x_min, x_max, y_min, y_max = input_layer.GetExtent()
-    '''
-    ring = input_polygon.GetGeometryRef(0)
-    n_vertex = ring.GetPointCount()
     
-    for i in range(0,n_vertex-1):
-        lon,lat,z = ring.GetPoint(i)
-        x_matrix,y_matrix = world2pixel(geo_transform,lon,lat)
-        x_list.append(x_matrix)
-        y_list.append(y_matrix)
-    
-    x_list.sort()
-    x_min = x_list[0]
-    y_list.sort()
-    y_min = y_list[0]
-    x_list.sort(None, None, True)
-    x_max = x_list[0]
-    y_list.sort(None, None, True)
-    y_max = y_list[0]
-    
-    lon_min = float(x_min*geo_transform[1]+geo_transform[0]) 
-    lat_min = float(geo_transform[3]+y_min*geo_transform[5])
-    # Create the destination data source
-    '''
-    x_res = int((x_max - x_min) / geo_transform[1])
-    y_res = int((y_max - y_min) / abs(geo_transform[5]))
-    target_ds = osgeo.gdal.GetDriverByName('MEM').Create('', x_res, y_res, GDT_Byte)
-    target_ds.SetGeoTransform((x_min, geo_transform[1], 0, y_max, 0, geo_transform[5]))
+    x_res = int((x_max - x_min) / pixel_width) #pixel x-axis resolution
+    y_res = int((y_max - y_min) / pixel_height) #pixel y-axis resolution
+    target_ds = osgeo.gdal.GetDriverByName('MEM').Create('', x_res, y_res, GDT_Byte) #create layer in memory
+    geo_transform = [x_min, pixel_width, 0, y_max, 0, -pixel_height] #geomatrix definition
+    target_ds.SetGeoTransform(geo_transform)
     band = target_ds.GetRasterBand(1)
     
     # Rasterize
@@ -294,8 +287,9 @@ def polygon2array(input_layer,output_band,geo_transform):
     
     # Read as array
     array = band.ReadAsArray()
-    
-    return array
+    target_ds = None
+    input_layer = None
+    return array,geo_transform
 
 
 def rast2shp(input_raster,output_shape):
@@ -309,12 +303,13 @@ def rast2shp(input_raster,output_shape):
     
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 18/03/2014
+    
+    Reference: http://pcjericks.github.io/py-gdalogr-cookbook/raster_layers.html
     '''
 
     src_image = osgeo.gdal.Open(input_raster)
     src_band = src_image.GetRasterBand(1)
     projection = src_image.GetProjection()
-    #mask = np.equal(src_band,1)
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     outfile=driver_shape.CreateDataSource(output_shape)
@@ -354,7 +349,7 @@ def world2pixel(geo_transform, long, lat):
     yDist = geo_transform[5] #y resolution
 
     pixel_x = int((long - ulX) / xDist)
-    pixel_y = int((ulY - lat) / xDist)
+    pixel_y = int((ulY - lat) / abs(yDist))
     return (pixel_x, pixel_y)
 
 
@@ -372,10 +367,9 @@ def pixel2world(geo_transform, cols, rows):
     Last modified: 18/03/2014
     '''
     
-    minx = geo_transform[0]
     miny = geo_transform[3] + cols*geo_transform[4] + rows*geo_transform[5] 
     maxx = geo_transform[0] + cols*geo_transform[1] + rows*geo_transform[2]
-    maxy = geo_transform[3]     
+    
     return (maxx,miny)
 
 
@@ -391,13 +385,10 @@ def utm2wgs84(easting, northing, zone):
     
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 18/03/2014
+    
+    Reference: http://monkut.webfactional.com/blog/archive/2012/5/2/understanding-raster-basic-gis-concepts-and-the-python-gdal-library/
     '''
-    '''
-    ###################################################################################################################
-    Reference:
-     http://monkut.webfactional.com/blog/archive/2012/5/2/understanding-raster-basic-gis-concepts-and-the-python-gdal-library/
-    ###################################################################################################################
-    '''
+
     #TODO: Do we really need this function?
     
     utm_coordinate_system = osgeo.osr.SpatialReference()
@@ -409,7 +400,8 @@ def utm2wgs84(easting, northing, zone):
     
     # create transform component
     utm_to_wgs84_geo_transform = osgeo.osr.CoordinateTransformation(utm_coordinate_system, wgs84_coordinate_system) # (, )
-    return utm_to_wgs84_geo_transform.TransformPoint(easting, northing, 0) # returns lon, lat, altitude
+    lon,lat,altitude = utm_to_wgs84_geo_transform.TransformPoint(easting, northing, 0) #return lon, lat and altitude
+    return lon, lat, altitude 
 
 
 def reproject_shapefile(input_shape,output_shape,output_projection):
@@ -435,8 +427,8 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     #select input file and create an output file
     infile=driver.Open(input_shape,0)
     inlayer=infile.GetLayer()
-    inprj = inlayer.GetSpatialRef()
-    if inprj == None:
+    inprj = inlayer.GetSpatialRef() #get the original spatial reference
+    if inprj == None: #if spatial reference not existing, use the default one
         inprj = 4326
     
     outprj=osgeo.osr.SpatialReference()
@@ -499,3 +491,64 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     prjfile = open(output_shape[:-4]+'.prj', 'w')
     prjfile.write(outprj.ExportToWkt())
     prjfile.close()
+    
+    
+def split_shape(input_layer,output_shape,index):
+    
+    '''Extract a single feature from a shapefile
+    
+    :param input_layer: layer of a shapefile (shapefile layer)
+    :param output_shape: path and name of the output shapefile (temporary file) (*.shp) (string)
+    :param index: index of the feature to extract (integer)
+    :returns:  an output shapefile is created
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 25/03/2014
+    ''' 
+
+    #TODO: Why do we need this function? Does not seems like a good idea to do this. Why not simply loop through the features?
+    
+    driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    layer_defn = input_layer.GetLayerDefn()
+    # loop through the input features
+    inFeature = input_layer.GetFeature(index)
+    if os.path.exists(output_shape):
+        driver.DeleteDataSource(output_shape) 
+    outDS = driver.CreateDataSource(output_shape)
+
+    field_names = [layer_defn.GetFieldDefn(j).GetName() for j in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
+        
+    if outDS is None:
+        print 'Could not create file'
+        sys.exit(1)
+
+    outLayer = outDS.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
+
+    # get the FieldDefn for the county name field
+    for j in range(0,len(field_names)):
+        field = inFeature.GetFieldDefnRef(field_names[j])
+        outLayer.CreateField(field)
+
+    # get the FeatureDefn for the output shapefile
+    featureDefn = outLayer.GetLayerDefn()
+
+    # get the input geometry
+    geom = inFeature.GetGeometryRef()
+
+    # create a new feature
+    outFeature = osgeo.ogr.Feature(featureDefn)
+
+    # set the geometry and attribute
+    outFeature.SetGeometry(geom)
+    for j in range(0,len(field_names)):
+        outFeature.SetField(field_names[j],inFeature.GetField(field_names[j]))
+    
+    # add the feature to the shapefile
+    outLayer.CreateFeature(outFeature)
+    
+    # destroy the features and get the next input feature
+    outFeature.Destroy()
+    inFeature.Destroy()
+        
+    outDS.Destroy()
