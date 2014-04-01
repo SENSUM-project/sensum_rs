@@ -100,7 +100,7 @@ def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     return output_array
     
     
-def train_classifier(input_raster_list,input_shape_list,output_txt,classification_type,training_field):
+def train_classifier_otb(input_raster_list,input_shape_list,output_txt,classification_type,training_field):
     
     '''Training of the desired classifier using OTB library
     
@@ -163,7 +163,7 @@ def train_classifier(input_raster_list,input_shape_list,output_txt,classificatio
     TrainImagesClassifier.ExecuteAndWriteOutput()
  
 
-def supervised_classification(input_raster,input_txt,output_raster):
+def supervised_classification_otb(input_raster,input_txt,output_raster):
     
     '''Supervised classification using OTB library
     
@@ -210,6 +210,144 @@ def supervised_classification(input_raster,input_txt,output_raster):
     # The following line execute the application 
     ImageClassifier.ExecuteAndWriteOutput()
     
+
+def generate_training(input_band_list,input_shape,training_field):
+    
+    '''Extract the training set from the input shapefile
+    
+    :param input_band_list: list of 2darrays corresponding to bands (band 1: blue) (list of numpy arrays)
+    :param input_shape: path and name of shapefile with the polygons for training definition (*.shp) (string)
+    :param training_field: name of the discriminant attribute in the training shapefile (string)
+    :returns: list with 2 2darrays is returned (sample_matrix, train_matrix)
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 01/04/2014
+    '''
+    
+    driver_shape = osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    inDS = driver_shape.Open(input_shape, 0)
+    if inDS is None:
+        print 'Could not open file'
+        sys.exit(1)
+    inLayer = inDS.GetLayer()
+    numFeatures = inLayer.GetFeatureCount()
+    print 'Number of reference features: ' + str(numFeatures)
+    temp_shape = input_shape[:-4]+'_temp.shp'
+    
+    sample_matrix = np.zeros((1,4)).astype(np.float32)
+    train_matrix = np.zeros((1)).astype(np.int32)
+    print sample_matrix.shape
+    
+    stack_new = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2],input_band_list[3])) #stack with the original bands
+    
+    for n in range(0,numFeatures):
+        print 'Feature ' + str(n+1) + ' of ' + str(numFeatures)
+        #separate each polygon creating a temp file
+        split_shape(inLayer,temp_shape,n) #extract single polygon
+        inFeature = inLayer.GetFeature(n)
+        training_def = inFeature.GetField(training_field) #take the class definition for the sample
+        
+        #conversion of the temp file to raster
+        shutil.copyfile(input_shape[:-4]+'.prj',temp_shape[:-4]+'.prj')
+        temp = driver_shape.Open(temp_shape, 0)
+        temp_layer = temp.GetLayer()
+        reference_matrix, ref_geo_transform = polygon2array(temp_layer,0,0) #convert the single polygon to raster
+        temp.Destroy() 
+        driver_shape.DeleteDataSource(temp_shape) #delete the temp file
+        
+        mask = np.where(reference_matrix == 1) #raster used to extract the mask for the desired sample
+    
+        #print 'Pixels per sample: ' + str(len(mask[0]))
+        for l in range(0,len(mask[0])):
+            sample_matrix = np.append(sample_matrix, [stack_new[mask[0][l]][mask[1][l]][:]], 0) #define the sample matrix with the rows = number of pixels from each sample and columns = number of bands
+            train_matrix = np.append(train_matrix, [training_def], 0) #training set defined as an array with number of elements equal to rows of the sample matrix
+    
+    return sample_matrix,train_matrix
+
+
+def create_svm_training_file(sample_matrix,train_matrix,output_file):
+    
+    '''Export training set to text file
+    
+    :param sample_matrix: 2darray with number of rows equal to number of sample pixels and columns equal to number of bands
+    :param train_matrix: 1darray with class value corresponding to each pixel sample
+    :param output_file: path and name of the output text file (*.txt) (string)
+    :returns:  an output file is created with structure sample,sample,sample,sample,class
+    :raises: AttributeError, KeyError
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 01/04/2014
+    '''
+    
+    train_file = train_matrix.reshape((train_matrix.size,1))
+    train_file = np.hstack((sample_matrix, train_file))
+    np.savetxt(output_file, train_file, delimiter=',')
+    
+    
+def read_svm_training_file(input_file):
+    
+    '''Read training set from text file
+    
+    :param input_file: path and name of the text file with the training set
+    :returns:  list with 2 2darrays is returned (sample_matrix, train_matrix)
+    :raises: AttributeError, KeyError
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 01/04/2014
+    '''
+    
+    train_file = np.genfromtxt(input_file, delimiter=',')
+    samples_from_file = np.float32(train_file[0:train_file.size,0:4]) #read samples from file
+    train_from_file = np.float32(train_file[0:train_file.size,4]) #read defined classes from file
+    
+    return samples_from_file,train_from_file
+    
+    
+def update_svm_training_file(input_file,sample_matrix,train_matrix):
+    
+    '''Update a text file with new training samples
+    
+    :param input_file: path and name of the text file with the training set
+    :param sample_matrix: 2darray with the samples to add 
+    :param train_matrix: 1darray with the corresponding classes
+    :returns:  input file is updated with new data
+    :raises: AttributeError, KeyError
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 01/04/2014
+    '''
+    
+    train_file = train_matrix.reshape((train_matrix.size,1))
+    train_file = np.hstack((sample_matrix, train_file))
+    train_file = np.vstack((np.genfromtxt(input_file, delimiter=','), train_file))
+    np.savetxt(input_file, train_file, delimiter=',')
+
+
+def svm_classification_opencv(input_band_list,sample_matrix,train_matrix):
+    
+    '''Supervised SVM classification 
+    
+    :param input_band_list: list of 2darrays corresponding to bands (band 1: blue) (list of numpy arrays)
+    :param sample_matrix: 2darray with the samples to add 
+    :param train_matrix: 1darray with the corresponding classes
+    :returns:  2darray with predicted classes
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 01/04/2014
+    '''
+    
+    stack_new = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2],input_band_list[3])) #stack with the original bands
+    samples = stack_new.reshape((-1,4)) #input image as matrix with rows = (rows_original * cols_original) and columns = number of bands
+    params = dict( kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC,C = 10000 ) #definition of the SVM parameters (kernel, type of algorithm and parameter related to the chosen algorithm
+    cl = cv2.SVM()
+    cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
+    y_val = cl.predict_all(samples) #classification of the input image
+    output = y_val.reshape(input_band_list[0].shape).astype(np.uint16) #reshape to the original rows and columns
+    
+    return output
+
 
 def class_to_segments(input_raster,input_shape,output_shape):
     
