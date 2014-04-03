@@ -80,9 +80,6 @@ def read_image(input_raster,data_type,band_selection):
     Last modified: 18/03/2014
     ''' 
     
-    #TODO: Why not restrict this function to return band_list only? Would make it more clear and not redundant with Read_Image_Parameters.
-    #TODO: You use as default import type uint16 but for export of images you use gdt_float32. 
-    #TODO: Is this the general function to make rasters available to functions? How do you deal with GDAL to OpenCV matrices?
     band_list = []
     
     if data_type == 0: #most of the images (MR and HR) can be read as uint16
@@ -206,8 +203,6 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width,pixel_he
     Reference: http://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html
     '''
   
-    #TODO: Explain additional arguments px_W,px_H,x_min,x_max,y_min,y_max
-    
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     data_source = driver_shape.Open(input_shape)
     source_layer = data_source.GetLayer()
@@ -419,8 +414,6 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     Last modified: 24/03/2014
     ''' 
 
-    #TODO: It seems that you transform from a default epsg 4326 and don't allow to define the input or simply read it from the input file
-    #TODO: would use only one argument to define input. 
     #driver definition for shapefile
     driver=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     

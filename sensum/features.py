@@ -27,7 +27,7 @@ License: This program is free software; you can redistribute it and/or modify
          (at your option) any later version.
 ---------------------------------------------------------------------------------
 '''
-
+#TODO: clean unused imports and wild imports
 import os
 import numpy as np
 import scipy.stats
@@ -228,8 +228,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
     Last modified: 19/03/2014
     '''
     
-    #TODO: can we go through this one together? do you calculate the glcm segment wise and output a 2d matrix with values per segment?
-    
+
     index_glcm = 0.0
     output_list = []
     mask = np.equal(input_band_segmentation,dn_value)
@@ -241,7 +240,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
     ystart = np.amin(seg_pos[0])
     yend = np.amax(seg_pos[0])
     #data_glcm = np.zeros((yend-ystart+1,xend-xstart+1)) 
-    data_glcm = input_band[ystart:yend+1,xstart:xend+1] #TODO: is this redefinition intended?
+    data_glcm = input_band[ystart:yend+1,xstart:xend+1]
     
     glcm = greycomatrix(data_glcm, [1], [0], levels=256, symmetric=False, normed=True)
     for indx in range(0,len(indexes_list)):
@@ -253,7 +252,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
 
 def texture_moving_window(input_band_list,window_dimension,index,quantization_factor):
     
-    '''Compute the desired spectral feature from each window
+    '''Compute the desired textural feature from each window
     
     :param input_band_list: list of 2darrays (list of numpy arrays)
     :param window_dimension: dimension of the processing window (integer)

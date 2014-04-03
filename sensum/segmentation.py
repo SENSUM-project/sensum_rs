@@ -140,7 +140,7 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
                http://www.ecognition.cc/download/baatz_schaepe.pdf
     '''
     
-    #TODO: Would exclude this function from the package as it is not fully open-source and needs to call an exe file.
+    #TODO: After having talked to Max, it would be fine to include this algorithms in sensum provided that we can use that source code from TerrAida
     
     #default values, set in case of 0 as input
     if euc_threshold == 0:
@@ -226,7 +226,7 @@ def region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color
                http://marte.sid.inpe.br/col/sid.inpe.br/deise/1999/02.05.09.30/doc/T205.pdf
     '''
     
-    #TODO: Would exclude this function from the package as it is not fully open-source and needs to call an exe file.
+    #TODO: After having talked to Max, it would be fine to include this algorithms in sensum provided that we can use that source code from TerrAida
     
     #default values, set in case of 0 as input
     if euc_threshold == 0:

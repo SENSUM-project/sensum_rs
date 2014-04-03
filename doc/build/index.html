@@ -63,67 +63,9 @@
 <span id="code-documentation"></span><h2>Code documentation<a class="headerlink" href="#module-sensum" title="Permalink to this headline">¶</a></h2>
 </div>
 </div>
-<div class="section" id="module-sensum.classification">
-<span id="classification-module"></span><h1>Classification module<a class="headerlink" href="#module-sensum.classification" title="Permalink to this headline">¶</a></h1>
-<span class="target" id="module-classification"></span><dl class="function">
-<dt id="sensum.classification.unsupervised_classification">
-<tt class="descclassname">sensum.classification.</tt><tt class="descname">unsupervised_classification</tt><big>(</big><em>input_file</em>, <em>output_file</em>, <em>n_classes</em>, <em>n_iterations</em><big>)</big><a class="headerlink" href="#sensum.classification.unsupervised_classification" title="Permalink to this definition">¶</a></dt>
-<dd><p>Unsupervised K-Means classification using OTB library.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>input_file</strong> &#8211; The input file (str).</li>
-<li><strong>output_file</strong> &#8211; The output file (str).</li>
-<li><strong>n_classes</strong> &#8211; The number of classes (int).</li>
-<li><strong>n_iterations</strong> &#8211; The number of iterations (int).</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Output image is created containing results from the classification.</p>
-</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">Raises:</th><td class="field-body"><p class="first last">AttributeError, KeyError</p>
-</td>
-</tr>
-</tbody>
-</table>
-<p>Author: Daniele De Vecchi - 
-Last modified: 13.05.2013</p>
-</dd></dl>
-
-<dl class="function">
-<dt id="sensum.classification.supervised_classification">
-<tt class="descclassname">sensum.classification.</tt><tt class="descname">supervised_classification</tt><big>(</big><em>classification_type</em>, <em>path</em>, <em>input_file</em>, <em>segmentation_file</em>, <em>output_file</em>, <em>training_field</em><big>)</big><a class="headerlink" href="#sensum.classification.supervised_classification" title="Permalink to this definition">¶</a></dt>
-<dd><p>Supervised classification using OTB library.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field-odd field"><th class="field-name">Parameters:</th><td class="field-body"><ul class="first simple">
-<li><strong>classification_type</strong> &#8211; String containing the chosen algorithm (&#8216;libsvm&#8217;,&#8217;svm&#8217;,&#8217;dt&#8217;,&#8217;gbt&#8217;,&#8217;bayes&#8217;,&#8217;rf&#8217;,&#8217;knn&#8217;).</li>
-<li><strong>path</strong> &#8211; Path to the considered folder (str).</li>
-<li><strong>input_file</strong> &#8211; Name of the input file (str).</li>
-<li><strong>segmentation_file</strong> &#8211; Name of the shapefile result of the segmentation and with training classes already defined: The number of iterations (str).</li>
-<li><strong>output_file</strong> &#8211; Name of the output image (str).</li>
-<li><strong>training_field</strong> &#8211; Name of the field containing the defined class for each segment (str).</li>
-</ul>
-</td>
-</tr>
-<tr class="field-even field"><th class="field-name">Returns:</th><td class="field-body"><p class="first">Output image is created containing results from the classification.</p>
-</td>
-</tr>
-<tr class="field-odd field"><th class="field-name">Raises:</th><td class="field-body"><p class="first last">AttributeError, KeyError</p>
-</td>
-</tr>
-</tbody>
-</table>
-<p>Author: Daniele De Vecchi - 
-Last modified: 13.05.2013</p>
-</dd></dl>
-
-</div>
+<div class="section" id="classification-module">
+<h1>Classification module<a class="headerlink" href="#classification-module" title="Permalink to this headline">¶</a></h1>
+<span class="target" id="module-sensum.classification"></span><span class="target" id="module-classification"></span></div>
 
 
           </div>
@@ -138,7 +80,7 @@ Last modified: 13.05.2013</p>
 <li><a class="reference internal" href="#module-sensum">Code documentation</a></li>
 </ul>
 </li>
-<li><a class="reference internal" href="#module-sensum.classification">Classification module</a></li>
+<li><a class="reference internal" href="#classification-module">Classification module</a></li>
 </ul>
 
   <h3>This Page</h3>

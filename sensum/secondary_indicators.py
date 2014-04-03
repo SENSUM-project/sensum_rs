@@ -70,8 +70,6 @@ def shadow_length(input_band,latitude,longitude,date):
     ''' 
     
     #TODO: Problem with Sun() function in ephem.
-    #TODO: which kind of raster input is required? not clear from description.
-    #TODO: length of shadow from were to were? Building location information needed?
     
     o = ephem.Observer()
     o.lat, o.long,o.date = latitude,longitude,date

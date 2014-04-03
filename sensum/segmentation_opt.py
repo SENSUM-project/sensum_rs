@@ -68,9 +68,6 @@ def create_extended_patch(input_band_list,reference_band,input_band_geo_transfor
     Last modified: 25/03/2014
     '''
     
-    #TODO: Please avoid os.makedirs and similar file system commands whenever possible! Again, we should work with arrays and not with files.
-    #TODO: Not clear to me what this function does from looking at the description. 
-    #TODO: What do you mean with extended raster?, Does it mask the raster to the reference objects?
     output_band_list = []
     
     rows,cols = input_band_list[0].shape
@@ -137,8 +134,7 @@ def evaluation(input_band,reference_band,input_band_geo_transform,ref_geo_transf
     Last modified: 25/03/2014
     '''
     
-    #TODO: Each function should take as input a matrix. If a file is used as input, we should use before the according conversion function. This should be done outside the function in the main file.
-    #TODO: Please add references!
+    #TODO: Please add references and update function description
     #TODO: define options for select_criteria argument (you have them in comments within the code, but we need to have clear in the description)
     #TODO: Taking the sum of all criteria is correct?
     #TODO: We should probably add another function or extend this one in order to allow for not only a supervised evaluation with reference object (as is done here), but also to allow for an unsupervised one (e.g. for Landsat data)
@@ -268,9 +264,7 @@ def bound_generator(segmentation_name):
     Last modified: 25/03/2014
     '''
     
-    #TODO: I would need a walk through the whole segmentation optimization procedure.
     #TODO: OTB segmentations are not supported by the optimization procedure?
-    #TODO: Again, would exclude Baatz and Region Growing algorithms.
     
     mybounds =[]
     

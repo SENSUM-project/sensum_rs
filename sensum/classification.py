@@ -267,7 +267,7 @@ def generate_training(input_band_list,input_shape,training_field):
 
 
 def create_svm_training_file(sample_matrix,train_matrix,output_file):
-    
+    #TODO: would not focus only on svm as classifier in this and the following functions, allow to provide as additional parameter the type of classifier 
     '''Export training set to text file
     
     :param sample_matrix: 2darray with number of rows equal to number of sample pixels and columns equal to number of bands
@@ -363,7 +363,6 @@ def class_to_segments(input_raster,input_shape,output_shape):
     Last modified: 23/03/2014
     '''
     #Example of hybrid approach
-    #TODO: this is only a spatial union operation, isn't it? So it is not part of the hybrid approach where you aggregate pixel classes to segments!?
     rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
     band_list_class = read_image(input_raster,np.int32,0) #read original raster file
     shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
@@ -478,7 +477,7 @@ def reclassify_raster(input_band,reclass_operation_list):
     
 
 def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list):
-    
+    #TODO: in which way is this function related to the classification?
     '''Extract a subset of the input shapefile according to the specified attribute field and list of values
     
     :param input_shape: path and name of the input shapefile (*.shp) (string)
