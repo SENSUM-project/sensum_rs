@@ -36,6 +36,9 @@ import cv2
 import xml.etree.cElementTree as ET
 import otbApplication
 from sensum.conversion import *
+import time
+from sklearn import tree
+from sklearn.ensemble import GradientBoostingClassifier
 
 if os.name == 'posix':
     separator = '/'
@@ -211,7 +214,7 @@ def supervised_classification_otb(input_raster,input_txt,output_raster):
     ImageClassifier.ExecuteAndWriteOutput()
     
 
-def generate_training(input_band_list,input_shape,training_field):
+def generate_training(input_band_list,input_shape,training_field,pixel_width,pixel_height):
     
     '''Extract the training set from the input shapefile
     
@@ -233,7 +236,7 @@ def generate_training(input_band_list,input_shape,training_field):
     inLayer = inDS.GetLayer()
     numFeatures = inLayer.GetFeatureCount()
     print 'Number of reference features: ' + str(numFeatures)
-    temp_shape = input_shape[:-4]+'_temp.shp'
+    #temp_shape = input_shape[:-4]+'_temp.shp'
     
     sample_matrix = np.zeros((1,4)).astype(np.float32)
     train_matrix = np.zeros((1)).astype(np.int32)
@@ -244,21 +247,18 @@ def generate_training(input_band_list,input_shape,training_field):
     for n in range(0,numFeatures):
         print 'Feature ' + str(n+1) + ' of ' + str(numFeatures)
         #separate each polygon creating a temp file
-        split_shape(inLayer,temp_shape,n) #extract single polygon
+        temp = split_shape(inLayer,'',n,'memory') #extract single polygon
         inFeature = inLayer.GetFeature(n)
         training_def = inFeature.GetField(training_field) #take the class definition for the sample
-        
         #conversion of the temp file to raster
-        shutil.copyfile(input_shape[:-4]+'.prj',temp_shape[:-4]+'.prj')
-        temp = driver_shape.Open(temp_shape, 0)
+        
         temp_layer = temp.GetLayer()
-        reference_matrix, ref_geo_transform = polygon2array(temp_layer,0,0) #convert the single polygon to raster
+        reference_matrix, ref_geo_transform = polygon2array(temp_layer,pixel_width,pixel_height) #convert the single polygon to raster
         temp.Destroy() 
-        driver_shape.DeleteDataSource(temp_shape) #delete the temp file
         
         mask = np.where(reference_matrix == 1) #raster used to extract the mask for the desired sample
     
-        #print 'Pixels per sample: ' + str(len(mask[0]))
+        print 'Pixels per sample: ' + str(len(mask[0]))
         for l in range(0,len(mask[0])):
             sample_matrix = np.append(sample_matrix, [stack_new[mask[0][l]][mask[1][l]][:]], 0) #define the sample matrix with the rows = number of pixels from each sample and columns = number of bands
             train_matrix = np.append(train_matrix, [training_def], 0) #training set defined as an array with number of elements equal to rows of the sample matrix
@@ -266,8 +266,8 @@ def generate_training(input_band_list,input_shape,training_field):
     return sample_matrix,train_matrix
 
 
-def create_svm_training_file(sample_matrix,train_matrix,output_file):
-    #TODO: would not focus only on svm as classifier in this and the following functions, allow to provide as additional parameter the type of classifier 
+def create_training_file(sample_matrix,train_matrix,output_file):
+    
     '''Export training set to text file
     
     :param sample_matrix: 2darray with number of rows equal to number of sample pixels and columns equal to number of bands
@@ -285,7 +285,7 @@ def create_svm_training_file(sample_matrix,train_matrix,output_file):
     np.savetxt(output_file, train_file, delimiter=',')
     
     
-def read_svm_training_file(input_file):
+def read_training_file(input_file):
     
     '''Read training set from text file
     
@@ -304,7 +304,7 @@ def read_svm_training_file(input_file):
     return samples_from_file,train_from_file
     
     
-def update_svm_training_file(input_file,sample_matrix,train_matrix):
+def update_training_file(input_file,sample_matrix,train_matrix):
     
     '''Update a text file with new training samples
     
@@ -322,29 +322,70 @@ def update_svm_training_file(input_file,sample_matrix,train_matrix):
     train_file = np.hstack((sample_matrix, train_file))
     train_file = np.vstack((np.genfromtxt(input_file, delimiter=','), train_file))
     np.savetxt(input_file, train_file, delimiter=',')
-
-
-def svm_classification_opencv(input_band_list,sample_matrix,train_matrix):
     
-    '''Supervised SVM classification 
+    
+def supervised_classification_opencv(input_band_list,sample_matrix,train_matrix,classification_type):
+    
+    '''Supervised classification using OpenCV library
     
     :param input_band_list: list of 2darrays corresponding to bands (band 1: blue) (list of numpy arrays)
     :param sample_matrix: 2darray with the samples to add 
     :param train_matrix: 1darray with the corresponding classes
+    :param classification type: definition of the desired classification algorithm ('svm','dt','gbt','bayes','rf','knn') (string)
     :returns:  2darray with predicted classes
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - Mostapha Harb
+    Author: Daniele De Vecchi - Daniel Aurelio Galeazzo - Mostapha Harb
     Last modified: 01/04/2014
     '''
     
     stack_new = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2],input_band_list[3])) #stack with the original bands
     samples = stack_new.reshape((-1,4)) #input image as matrix with rows = (rows_original * cols_original) and columns = number of bands
-    params = dict( kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC,C = 10000 ) #definition of the SVM parameters (kernel, type of algorithm and parameter related to the chosen algorithm
-    cl = cv2.SVM()
-    cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
-    y_val = cl.predict_all(samples) #classification of the input image
-    output = y_val.reshape(input_band_list[0].shape).astype(np.uint16) #reshape to the original rows and columns
+    print classification_type
+    
+    if classification_type == "svm":
+    
+        params = dict( kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC,C = 10000 ) #definition of the SVM parameters (kernel, type of algorithm and parameter related to the chosen algorithm
+        cl = cv2.SVM()
+        cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
+        y_val = cl.predict_all(samples) #classification of the input image
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16) #reshape to the original rows and columns
+    
+    if classification_type == "dt":
+        
+        cl = tree.DecisionTreeClassifier()
+        cl = cl.fit(sample_matrix, train_matrix)
+        y_val = cl.predict(samples)
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16)
+    
+    if classification_type == "gbt":
+        
+        cl = GradientBoostingClassifier()
+        cl = cl.fit(sample_matrix, train_matrix)
+        y_val = cl.predict(samples)
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16)
+    
+    if classification_type == "bayes":
+    
+        cl = cv2.NormalBayesClassifier(sample_matrix, train_matrix)
+        y_val = cl.predict(samples)
+        y_val = np.array(y_val[1])
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16)
+        
+    if classification_type == "rf":
+        
+        cl = cv2.RTrees()
+        cl.train(sample_matrix, cv2.CV_ROW_SAMPLE, train_matrix)
+        y_val = np.float32( [cl.predict(s) for s in samples] )
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16)
+        
+    if classification_type == "knn":
+        
+        cl = cv2.KNearest()
+        cl.train(sample_matrix, train_matrix)
+        retval, results, neigh_resp, dists = cl.find_nearest(samples, k = 10)
+        y_val = results.ravel()
+        output = y_val.reshape(input_band_list[0].shape).astype(np.uint16)
     
     return output
 
@@ -363,6 +404,7 @@ def class_to_segments(input_raster,input_shape,output_shape):
     Last modified: 23/03/2014
     '''
     #Example of hybrid approach
+    #TODO: this is only a spatial union operation, isn't it? So it is not part of the hybrid approach where you aggregate pixel classes to segments!?
     rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
     band_list_class = read_image(input_raster,np.int32,0) #read original raster file
     shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
@@ -477,7 +519,7 @@ def reclassify_raster(input_band,reclass_operation_list):
     
 
 def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list):
-    #TODO: in which way is this function related to the classification?
+    
     '''Extract a subset of the input shapefile according to the specified attribute field and list of values
     
     :param input_shape: path and name of the input shapefile (*.shp) (string)

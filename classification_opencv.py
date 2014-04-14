@@ -122,6 +122,7 @@ train_classifier([input_raster,input_raster_2],[input_shape,input_shape_2],input
 supervised_classification(input_raster_2,input_txt,output_raster_sup)
 ''' 
 
+'''
 band_list = read_image(input_raster_2,np.float32,0)
 rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster_2)
 sample_list = []
@@ -170,19 +171,45 @@ for n in range(0,numFeatures):
 train_matrix = np.float32(train_matrix) #match the data format to float32
 
 print train_matrix.shape
-print sample_matrix.dtype
+print sample_matrix.shape
 print samples.shape
 
+## CREATE ##
+train_file = train_matrix.reshape((train_matrix.size,1))
+train_file = np.hstack((sample_matrix, train_file))
+np.savetxt('F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\test.txt', train_file, delimiter=',')
+
+
+## READ ##
+
+train_file = np.genfromtxt('F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\test.txt', delimiter=',')
+samples_from_file = np.float32(train_file[0:train_file.size,0:4]) #read samples from file
+train_from_file = np.float32(train_file[0:train_file.size,4]) #read defined classes from file
+
+## UPDATE ##
+'''
+'''
+train_file = train_matrix.reshape((train_matrix.size,1))
+train_file = np.hstack((sample_matrix, train_file))
+train_file = np.vstack((np.genfromtxt('test.txt', delimiter=','), train_file))
+np.savetxt('test.txt', train_file, delimiter=',')
+'''
+'''
 #http://docs.opencv.org/modules/ml/doc/support_vector_machines.html
 #Limitation: if the number of samples per class (provided polygons have different dimensions) are very different the classification can discard classes (and the classes are re-assigned so they do not correspond
 #to the pre-defined ones)
 params = dict( kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC,C = 10000 ) #definition of the SVM parameters (kernel, type of algorithm and parameter related to the chosen algorithm
 cl = cv2.SVM()
-cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
+cl.train_auto(samples_from_file,train_from_file,None,None,params,10) #creation of the training set forcing the parameters optimization
+#cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
 y_val = cl.predict_all(samples) #classification of the input image
 output = y_val.reshape(band_list[0].shape).astype(np.uint16) #reshape to the original rows and columns
 write_image([output],np.uint16,0,output_raster_opencv_2,rows,cols,geo_transform,projection) #write output file
+'''
 
-#Still to add
-#-> write to txt/xml file the training samples with associated classes
-#-> append new training samples to the existing one creating a bigger training set
+input_band_list = read_image(input_raster_2,np.float32,0)
+rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster_2)
+sample_matrix,train_matrix = generate_training(input_band_list,input_shape_2,training_field,geo_transform[1],abs(geo_transform[5]))
+
+output = supervised_classification_opencv(input_band_list,sample_matrix,train_matrix,'rf')
+write_image([output],np.uint16,0,output_raster_opencv_2,rows,cols,geo_transform,projection) #write output file
