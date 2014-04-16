@@ -140,7 +140,7 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
                http://www.ecognition.cc/download/baatz_schaepe.pdf
     '''
     
-    #TODO: After having talked to Max, it would be fine to include this algorithms in sensum provided that we can use that source code from TerrAida
+    #TODO: Would exclude this function from the package as it is not fully open-source and needs to call an exe file.
     
     #default values, set in case of 0 as input
     if euc_threshold == 0:
@@ -170,13 +170,13 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
     GE= a[0]
     GS= a[1]
     
-    output_file = temp_folder_interimage + separator +'baatz_' +  str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) + '_' + str(index) + '.plm'
+    output_file = temp_folder_interimage + separator +'baatz_' +  str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) + '_' + str(index)
     
     #removing the file created by the segmenter after each run
     Folder_files = os.listdir(temp_folder_interimage)
-    file_ = [s for s in Folder_files if "ta_segmenter" in s]
-    if file_:
-        os.remove(temp_folder_interimage+separator+file_[0])
+    file_ = [s for s in Folder_files if "ta_segmenter" in s or "baatz" in s or "regiongrowing" in s]
+    for f in file_:
+        os.remove(temp_folder_interimage+separator+f)
     exe_file =  exe_folder_interimage +separator+ 'ta_baatz_segmenter.exe'   
     #runs the baatz segmenter
     os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder_interimage+'" "" Baatz "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
@@ -186,20 +186,20 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
         os.remove(output_file +'.raw')
     
     #changing plm to raw
-    os.rename(output_file, output_file[:-4] + ".raw")
+    os.rename(output_file + '.plm', output_file + ".raw")
 
     #removing the header lines from the raw file
-    with open(output_file[:-4] + ".raw", 'r+b') as f:
+    with open(output_file + ".raw", 'r+b') as f:
         lines = f.readlines()
     #print len(lines)
     
     lines[:] = lines[4:]
-    with open(output_file[:-4] + ".raw", 'w+b') as f:
+    with open(output_file + ".raw", 'w+b') as f:
         f.write(''.join(lines))
     f.close()
 
     ##memory mapping
-    segments_baatz = np.memmap(output_file[:-4] + ".raw", dtype=np.int32, shape=(rows, cols))#uint8, float64, int32, int16, int64
+    segments_baatz = np.memmap(output_file + ".raw", dtype=np.int32, shape=(rows, cols))#uint8, float64, int32, int16, int64
     
     return segments_baatz
 
@@ -226,7 +226,7 @@ def region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color
                http://marte.sid.inpe.br/col/sid.inpe.br/deise/1999/02.05.09.30/doc/T205.pdf
     '''
     
-    #TODO: After having talked to Max, it would be fine to include this algorithms in sensum provided that we can use that source code from TerrAida
+    #TODO: Would exclude this function from the package as it is not fully open-source and needs to call an exe file.
     
     #default values, set in case of 0 as input
     if euc_threshold == 0:
@@ -253,16 +253,15 @@ def region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color
     #print a[0], a[1]
     GE= a[0]
     GS= a[1]
-    output_file = temp_folder_interimage + separator +'regiongrowing_' + str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale) +'.plm'
+    output_file = temp_folder_interimage + separator +'regiongrowing_' + str(euc_threshold) + '_' + str(compactness) + '_' + str(baatz_color) + '_' + str(scale)
     
     #removing the changing name file created by the segmenter after each run
     Folder_files = os.listdir(temp_folder_interimage)
-    file_ = [s for s in Folder_files if "ta_segmenter" in s]
-    if file_:
-        os.remove(temp_folder_interimage+separator+file_[0])
+    file_ = [s for s in Folder_files if "ta_segmenter" in s or "baatz" in s or "regiongrowing" in s]
+    for f in file_:
+        os.remove(temp_folder_interimage+separator+f)
         
     exe_file =  exe_folder_interimage +separator+ 'ta_regiongrowing_segmenter.exe'   
-    
     
     #runs the regiongrowing segmenter
     os.system(exe_file + ' "'+input_raster+'" "'+str(GW)+'" "'+str(GN)+'" "'+str(GE)+'" "'+str(GS)+'" "" "'+temp_folder_interimage+'" "" RegionGrowing "'+str(euc_threshold)+'" "@area_min@" "'+str(compactness)+'" "'+str(baatz_color)+'" "'+str(scale)+'" "'+str(bands_str)+ '" "' + str(weights_str)+'" "'+output_file+'" "seg" "0.2" "" "" "no"')
@@ -272,21 +271,21 @@ def region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color
         os.remove(output_file +'.raw')
 
     #changing plm to raw
-    os.rename(output_file, output_file[:-4] + ".raw")
+    os.rename(output_file + '.plm', output_file + ".raw")
         
     #removing the header lines from the raw file
-    with open(output_file[:-4] + ".raw", 'r+b') as f:
+    with open(output_file + ".raw", 'r+b') as f:
         lines = f.readlines()
     f.close()
     
     lines[:] = lines[4:]
-    with open(output_file[:-4] + ".raw", 'w+b') as f:
+    with open(output_file + ".raw", 'w+b') as f:
         f.write(''.join(lines))
     #print len(lines)
     f.close()
     
     #memory mapping
-    segments_regiongrowing = np.memmap(output_file[:-4] + ".raw", dtype=np.int32, shape=(rows, cols))
+    segments_regiongrowing = np.memmap(output_file + ".raw", dtype=np.int32, shape=(rows, cols))
 
     return segments_regiongrowing
 
@@ -399,7 +398,7 @@ def edison_otb(input_raster,output_mode,output_file,spatial_radius,range_radius,
         Segmentation.SetParameterFloat("filter.edison.scale",scale)
 
     Segmentation.ExecuteAndWriteOutput()
-    
+    Segmentation = None
     
 def mprofiles_otb(input_raster,output_mode,output_file,size,start,step,sigma):
     

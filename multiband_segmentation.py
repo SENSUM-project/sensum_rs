@@ -1,134 +1,133 @@
 '''
-Created on Nov 6, 2013
-@author: daniele
-adjusted to new package structure by marc
+Updated 10/04/2014
+@author: Daniele De Vecchi
+adjusted according to new modules
 '''
 
 from sensum.segmentation import *
 import time
 
 ### Parameters #########################################################################################
-#input_image = 'C:\workspace\Sensum\Izmir\Applications\multiband_segmentation\\clipped_merged_new.tif'
+input_raster = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'
+output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\baatz_test.shp'
 
-input_image = "/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/pansharp.TIF"
-Folder_output = '/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup_2/'
+segmentation_name = 'region_growing' #felzenszwalb,quickshift,edison,meanshift,watershed,mprofiles,baatz,region_growing
 
 '''
-input_image = 'F:\\Sensum_xp\\Izmir\\MR\\1984-06-12\\LT51800331984164XXX04_B1_city.TIF'
-Folder_output = 'F:\\Sensum_xp\\Izmir\\Reference_layer\\'
+Edit segmentation parameters according to the desired segmentation, 0 for default values
+
+- felzenszwalb
 '''
-temp_Folder = '/home/marc/eclipse_data/sensum_testdata/Izmir/Applications/tmpfolder'
-exe_folder = '/home/marc/eclipse_data/sensum_testdata/Izmir/Applications/seg_exec'
+scale = 0 #scale: defines the observation level, higher scale means less and larger segments (float)
+sigma = 0 #sigma: idth of Gaussian smoothing kernel for preprocessing, zero means no smoothing (float)
+min_size = 0 #min_size: minimum size, minimum component size. Enforced using postprocessing. (integer)
+    
+'''
+- quickshift
+'''
+kernel_size = 0 #kernel_size: width of Gaussian kernel used in smoothing the sample density. Higher means fewer clusters. (float)
+max_distance = 0 #max_distance:cut-off point for data distances. Higher means fewer clusters. (float)
+ratio = 0 #ratio: balances color-space proximity and image-space proximity. Higher values give more weight to color-space. (float between 0 and 1)
+
+'''
+- edison
+'''
+spatial_radius=0 #spatial_radius: spatial radius parameter (integer, 0 for default)
+range_radius=0 #range_radius: range radius parameter (float, 0 for default)
+min_size=0 #min_size: minimum size parameter (integer, 0 for default)
+scale=0 #scale: scale factor (float, 0 for default)
+
+'''
+- meanshift
+'''
+spatial_radius=0 #spatial_radius: spatial radius parameter (integer, 0 for default)
+range_radius=0 #range_radius: range radius parameter (float, 0 for default)
+threshold=0 #threshold: threshold parameter (float, 0 for default)
+max_iter=0 #max_iter: limit on number of iterations (integer, 0 for default)
+min_size=0 #min_size: minimum size parameter (integer, 0 for default)
+
+'''
+- watershed
+'''
+threshold=0 #threshold: threshold parameter (float, 0 for default)
+level=0 #level: level parameter (float, 0 for default)
+
+'''
+- mprofiles
+'''
+size=0 #size: profile size (integer, 0 for default)
+start=0 #start: initial radius (integer, 0 for default)
+step=0 #step: radius step (integer, 0 for default)
+sigma=0 #sigma: threshold of the final decision rule (float, 0 for default)
+
+'''
+- baatz
+'''
+euc_threshold=0 #euc_threshold: euclidean distance threshold. The minimum Euclidean Distance between each segment feature. (float, positive)
+compactness=0 #compactness: Baatz Compactness Weight attribute (float, between 0 and 1)
+baatz_color=0 #baatz_color: Baatz Color Weight attribute (float, between 0 and 1)
+scale=0 #scale: Baatz scale attribute (float, positive)
+
+'''
+- region growing
+'''
+euc_threshold=0 #euc_threshold: euclidean distance threshold. The minimum Euclidean Distance between each segment feature. (float, positive)
+compactness=0 #compactness: Baatz Compactness Weight attribute (float, between 0 and 1)
+baatz_color=0 #baatz_color: Baatz Color Weight attribute (float, between 0 and 1)
+scale=0 #scale: Baatz scale attribute (float, positive)
+
+'''
+NOTE: 
+if the selected segmentation is baatz or region growing please update the variables temp_folder_interimage and exe_folder_interimage
+with the paths related to your configuration.
+'''
 ########################################################################################################
 
-osgeo.gdal.AllRegister()
-band_list = []
-#read input image and all the parameters
-#rows,cols,nbands,band_list,geo_transform,projection = Read_Image(input_image,np.float32)
+print segmentation_name
+start_time = time.time()
 
-#input_shape = Folder_output + 'C_TUR_GD_REG_UFP___Izmir.shp'
-#output_image = Folder_output + 'C_TUR_GD_REG_UFP___Izmir.TIF'
-'''
-extract_class(input_shape,input_shape[:-4]+'_class1.shp',1,'Class')
-extract_class(input_shape,input_shape[:-4]+'_class2.shp',2,'Class')
-'''
-#Shp2Rast(input_shape,output_image,0,0,'Year',geo_transform[1],geo_transform[5])
-#Shp2Rast(input_shape[:-4]+'_class2.shp',output_image[:-4]+'_class2.TIF',rows,cols,'Class',geo_transform[1],geo_transform[5])
-#img = np.dstack((band_list[2],band_list[1],band_list[0])) #stack RGB, segmentation algorithms are limited to 3 bands
-#print img.shape
-#rows,cols,nbands,band_list_ws,geo_transform,projection = Read_Image(input_image,np.uint8)
-#img_ws = np.dstack((band_list_ws[2],band_list_ws[1],band_list_ws[0]))
+if segmentation_name == 'felzenszwalb' or segmentation_name == 'quickshift':
+    input_band_list = read_image(input_raster,np.uint16,0)
+    rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster)
+    if segmentation_name == 'felzenszwalb':
+        segments = felzenszwalb_skimage(input_band_list, scale, sigma, min_size)
+    if segmentation_name == 'quickshift':
+        segments = quickshift_skimage(input_band_list,kernel_size, max_distance, ratio)
+    write_image([segments],np.int32,0,output_shape[:-4]+'.TIF',rows,cols,geo_transform,projection)
+    rast2shp(output_shape[:-4]+'.TIF',output_shape)
 
+if segmentation_name == 'edison':
+    try:
+        edison_otb(input_raster,'vector',output_shape,spatial_radius,range_radius,min_size,scale)
+    except:
+        print 'OTB problem with Edison segmentation'   
 
-#SLIC segmentation, input as unsigned integer 16
-#SLIC( Input_Image,ratio/compactness, n_segments, sigma, multiband_option) #0 for default values
-'''
-print '--- SLIC'
-start_time = time.time()
-segments_slic = SLIC(img,0,300,0,True) #SLIC segmentation is like a k-mean classification, True in case of multichannel option
-output_list = []
-output_list.append(segments_slic)    
-WriteOutputImage(input_image,Folder_output,'','Segmentation_slic.TIF',0,0,0,len(output_list),output_list)
-Rast2Shp(Folder_output+'Segmentation_slic.TIF',Folder_output+'Segmentation_slic.shp')
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
+if segmentation_name == 'meanshift':
+    try:
+        meanshift_otb(input_raster,'vector',output_shape,spatial_radius,range_radius,threshold,max_iter,min_size)
+    except:
+        print 'OTB problem with Meanshift segmentation' 
+        
+if segmentation_name == 'watershed':
+    try:
+        watershed_otb(input_raster,'vector',output_shape,threshold,level)
+    except:
+        print 'OTB problem with Watershed segmentation' 
+        
+if segmentation_name == 'mprofiles':
+    try:
+        mprofiles_otb(input_raster,'vector',output_shape,size,start,step,sigma)
+    except:
+        print 'OTB problem with Morphological profiles segmentation' 
+        
+if segmentation_name == 'baatz' or segmentation_name == 'region_growing':
+    rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster)
+    if segmentation_name == 'baatz':
+        segments = baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,1)    
+    if segmentation_name == 'region_growing':
+        segments = region_growing_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,1)
+    write_image([segments],np.int32,0,output_shape[:-4]+'.TIF',rows,cols,geo_transform,projection)
+    rast2shp(output_shape[:-4]+'.TIF',output_shape)
 
-#FELZENSZWALB segmentation
-#FELZENSZWALB(Input_Image, scale, sigma, min_size)
-print '--- FELZENSZWALB'
-start_time = time.time()
-segments_fz = FELZENSZWALB(img,0,0,0)
-output_list = []
-output_list.append(segments_fz)    
-WriteOutputImage(input_image,Folder_output,'','Segmentation_fz.TIF',0,0,GDT_Float32,len(output_list),output_list)
-Rast2Shp(Folder_output+'Segmentation_fz.TIF',Folder_output+'Segmentation_fz.shp')
 end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-
-#QUICKSHIFT segmentation
-#QUICKSHIFT(Input_Image,kernel_size, max_distance, ratio)
-print '--- QUICKSHIFT'
-start_time = time.time()
-segments_quick = QUICKSHIFT(img,0,0,0)
-output_list = []
-output_list.append(segments_quick)
-WriteOutputImage(input_image,Folder_output,'','Segmentation_quick.TIF',0,0,0,len(output_list),output_list)
-Rast2Shp(Folder_output+'Segmentation_quick.TIF',Folder_output+'Segmentation_quick.shp')
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
-'''
-#BAATZ segmentation
-#BAATZ(Input,Folder,exe,euc_threshold,compactness,baatz_color,scale,multiband_option)
-print '--- BAATZ'
-start_time = time.time()
-segments_baatz = BAATZ(input_image ,temp_Folder, exe_folder,0,0,0,0,True)
-output_list = []
-output_list.append(segments_baatz)
-WriteOutputImage(input_image,Folder_output,'','Segmentation_baatz.TIF',0,0,0,len(output_list),output_list)
-Rast2Shp(Folder_output+'Segmentation_baatz.TIF',Folder_output+'Segmentation_baatz.shp')
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
-'''
-#REGION GROWING
-#REGION_GROWING(Input,Folder,exe,euc_threshold,compactness,baatz_color,scale,multiband_option)
-print '--- REGION GROWING'
-start_time = time.time()
-segments_regiongrowing = REGION_GROWING(input_image,temp_Folder, exe_folder,0,0,0,0,True)
-output_list = []
-output_list.append(segments_regiongrowing)
-WriteOutputImage(input_image,Folder_output,'','Segmentation_regiongrowing.TIF',0,0,0,len(output_list),output_list)
-Rast2Shp(Folder_output+'Segmentation_regiongrowing.TIF',Folder_output+'Segmentation_regiongrowing.shp')
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
-'''
-print '--- WATERSHED OTB'
-start_time = time.time()
-watershed_otb(input_image,Folder_output+'Segmentation_watershed.shp','vector',0,0)
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
-
-print '--- MEANSHIFT OTB'
-start_time = time.time()
-meanshift_otb(input_image,Folder_output+'Segmentation_meanshift.shp','vector',0,0,0,0,0)
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-
-'''
-print '--- EDISON OTB'
-start_time = time.time()
-#(input_img,output_file,output_mode,spatial_radius,range_radius,min_size,scale)
-edison_otb(input_image,Folder_output+'Segmentation_edison.shp','vector',0,0,0,0)
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
-'''
-print '--- MORPHOLOGICAL PROFILES OTB'
-start_time = time.time()
-mprofiles_otb(input_image,Folder_output+'Segmentation_mprofiles.shp','vector',0,0,0,0)
-end_time = time.time()
-print '--- Time: ' + str(end_time-start_time)
-'''
+print 'Elapsed time: ' + str(end_time-start_time)
