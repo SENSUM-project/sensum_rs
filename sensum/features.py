@@ -27,7 +27,7 @@ License: This program is free software; you can redistribute it and/or modify
          (at your option) any later version.
 ---------------------------------------------------------------------------------
 '''
-#TODO: clean unused imports and wild imports
+
 import os
 import numpy as np
 import scipy.stats
@@ -36,6 +36,25 @@ from skimage.feature import greycomatrix
 from skimage.feature import greycoprops
 from sensum.conversion import *
 from sensum.classification import *
+import multiprocessing
+import sys
+import time
+
+
+#os.chdir('F:\\Sensum_xp\\Izmir\\')
+
+input_raster = 'building_extraction_sup\\pansharp.TIF'
+input_shape = 'building_extraction_sup\\segmentation_watershed_default_training.shp'
+input_raster_2 = 'wetransfer-749d73\\pansharp.TIF'
+input_shape_2 = 'wetransfer-749d73\\watershed_001_training.shp'
+input_raster_3 = 'F:\\Sensum_xp\\Izmir\\Landsat5\\1984\\LT51800331984164XXX04_B1_city_adj.TIF'
+input_txt = 'building_extraction_sup\\svm.txt'
+data_type = np.float32
+output_raster_opencv = 'building_extraction_sup\\opencv_supervised.TIF'
+output_raster_opencv_2 = 'wetransfer-749d73\\opencv_supervised.TIF'
+output_raster_otb = 'building_extraction_sup\\otb_unsupervised.TIF'
+output_raster_sup = 'wetransfer-749d73\\test_supervised_svm.TIF'
+training_field = 'Class'
 
 if os.name == 'posix':
     separator = '/'
@@ -185,20 +204,20 @@ def spectral_segments(input_band,dn_value,input_band_segmentation,indexes_list,b
             if indexes_list[indx] == 'mean' or indexes_list[indx] == 'ndvi_mean':
                 mean = mat_pos.mean()
                 output_list.append(mean)
-            if indexes_list[indx] == 'standard_deviation' or indexes_list[indx] == 'ndvi_standard_deviation':
+            if indexes_list[indx] == 'std' or indexes_list[indx] == 'ndvi_std':
                 std = mat_pos.std()
                 output_list.append(std)
             if indexes_list[indx] == 'mode':
                 mode_ar = scipy.stats.mode(mat_pos)
                 mode = mode_ar[0][0]
                 output_list.append(mode)
-            if indexes_list[indx] == 'max_brightness':
+            if indexes_list[indx] == 'max_br':
                 maxbr = np.amax(mat_pos)
                 output_list.append(maxbr)
-            if indexes_list[indx] == 'min_brightness':
+            if indexes_list[indx] == 'min_br':
                 minbr = np.amin(mat_pos)
                 output_list.append(minbr)
-            if indexes_list[indx] == 'weighted_brightness':
+            if indexes_list[indx] == 'weigh_br':
                 npixels = np.sum(mask)
                 outmask_band_sum = np.choose(mask,(0,input_band)) 
                 values = np.sum(outmask_band_sum)
@@ -228,7 +247,8 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
     Last modified: 19/03/2014
     '''
     
-
+    #TODO: can we go through this one together? do you calculate the glcm segment wise and output a 2d matrix with values per segment?
+    
     index_glcm = 0.0
     output_list = []
     mask = np.equal(input_band_segmentation,dn_value)
@@ -240,7 +260,7 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
     ystart = np.amin(seg_pos[0])
     yend = np.amax(seg_pos[0])
     #data_glcm = np.zeros((yend-ystart+1,xend-xstart+1)) 
-    data_glcm = input_band[ystart:yend+1,xstart:xend+1]
+    data_glcm = input_band[ystart:yend+1,xstart:xend+1] #TODO: is this redefinition intended?
     
     glcm = greycomatrix(data_glcm, [1], [0], levels=256, symmetric=False, normed=True)
     for indx in range(0,len(indexes_list)):
@@ -249,10 +269,11 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
     
     return output_list
  
+ #TODO
 
 def texture_moving_window(input_band_list,window_dimension,index,quantization_factor):
     
-    '''Compute the desired textural feature from each window
+    '''Compute the desired spectral feature from each window
     
     :param input_band_list: list of 2darrays (list of numpy arrays)
     :param window_dimension: dimension of the processing window (integer)
@@ -311,6 +332,8 @@ def texture_moving_window(input_band_list,window_dimension,index,quantization_fa
     else:
         cols_w = cols
     print rows,cols
+#
+#    rows_w = 10
     for i in range(0,rows_w):
         print str(i+1)+' of '+str(rows_w)
         for j in range(0,cols_w):
@@ -324,9 +347,145 @@ def texture_moving_window(input_band_list,window_dimension,index,quantization_fa
                     index_col = j+1 #window moving step
                     
                     output_ft_1[b][index_row][index_col]=float(feat1) #stack to store the results for different bands
-                
     for b in range(0,len(input_band_list)):
         output_list.append(output_ft_1[b][:][:])
     
     return output_list
-         
+
+    
+class Task_moving(object):
+    def __init__(self, i, rows_w, cols_w, input_band_list,band_list_q,window_dimension,index, quantization_factor):
+        self.i = i
+        self.rows_w = rows_w
+        self.cols_w = cols_w
+        self.input_band_list = input_band_list
+        self.band_list_q = band_list_q
+        self.window_dimension = window_dimension
+        self.index = index
+        self.quantization_factor = quantization_factor
+    def __call__(self):
+        global res
+        check = 1
+        print str(self.i+1)+' of '+str(self.rows_w)
+        for j in range(0,self.cols_w):
+            for b in range(0,len(self.input_band_list)):
+                data_glcm_1 = self.band_list_q[0][self.i:self.i+self.window_dimension,j:j+self.window_dimension] #extract the data for the glcm
+            
+                if (self.i+self.window_dimension<self.rows_w) and (j+self.window_dimension<self.cols_w):
+                    glcm1 = greycomatrix(data_glcm_1, [1], [0, np.pi/4, np.pi/2, np.pi*(3/4)], levels=self.quantization_factor, symmetric=False, normed=True)
+                    feat1 = greycoprops(glcm1, self.index)[0][0]
+                    index_row = self.i+1 #window moving step
+                    index_col = j+1 #window moving step
+                    #FIX IT NOOB
+                    if (check):
+                        res = []
+                        check = 0
+                    tmp = np.array([b,index_row,index_col,feat1])
+                    res = np.append(res,tmp)
+        if (check):
+            res = np.zeros(1)
+        return res
+    def __str__(self):
+         return str(self.i)
+    
+    
+if __name__ == '__main__':
+    print time.asctime( time.localtime(time.time()) )
+    # Establish communication queues
+    tasks = multiprocessing.JoinableQueue()
+    results = multiprocessing.Queue()
+    
+    # Start consumers
+    num_consumers = multiprocessing.cpu_count()  * 2
+    print 'Creating %d consumers' % num_consumers
+    consumers = [ Consumer(tasks, results)
+                  for i in xrange(num_consumers) ]
+    for w in consumers:
+        w.start()
+        
+    
+    input_band_list = read_image(input_raster_3,np.int32,0)
+#    texture_moving_window(input_band_list,7,'dissimilarity',64) 
+    
+    window_dimension = 5
+    index = 'dissimilarity'
+    quantization_factor = 64
+    
+    band_list_q = []
+    output_list = []
+    
+    #Quantization process
+    q_factor = quantization_factor - 1 
+    for b in range(0,len(input_band_list)):
+        inmatrix = input_band_list[b].reshape(-1)
+        out = np.bincount(inmatrix)
+        tot = inmatrix.shape[0]
+        freq = (out.astype(np.float32)/float(tot))*100 #frequency for each value
+        cumfreqs = np.cumsum(freq)
+    
+        first = np.where(cumfreqs>1.49)[0][0] #define occurrence limits for the distribution
+        last = np.where(cumfreqs>97.8)[0][0]
+        input_band_list[b][np.where(input_band_list[b]>last)] = last
+        input_band_list[b][np.where(input_band_list[b]<first)] = first
+ 
+        #max_matrix = np.ones(input_band_list[0].shape)*np.amax(input_band_list[b])
+        #q_matrix = np.ones(input_band_list[0].shape)*q_factor
+        k1 = float(q_factor)/float((last-first)) #k1 term of the quantization formula
+        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape) #k2 term of the quantization formula
+        out_matrix = np.floor(input_band_list[b]*k1+k2) #take the integer part
+        out_matrix2 = out_matrix-np.ones(out_matrix.shape)
+        out_matrix2.astype(np.uint8)
+
+        band_list_q.append(out_matrix2) #list of quantized 2darrays
+               
+    feat1 = 0.0
+    
+    rows,cols=input_band_list[0].shape
+    output_ft_1 = np.zeros((len(input_band_list),rows,cols)).astype(np.float32)
+    
+    print input_band_list[0].shape
+    if (rows%window_dimension)!=0:
+        rows_w = rows-1
+    else:
+        rows_w = rows
+    if (cols%window_dimension)!=0:
+        cols_w = cols-1
+    else:
+        cols_w = cols
+    print rows,cols
+
+#    
+#    rows_w = 50
+    
+    for i in range(0,rows_w):
+        tasks.put(Task_moving(i, rows_w, cols_w, input_band_list,band_list_q,window_dimension,index,quantization_factor))
+        
+        
+     # Add a poison pill for each consumer
+    for i in xrange(num_consumers):
+        tasks.put(None)
+        #print tasks
+    # Wait for all of the tasks to finish
+    tasks.join()
+    
+    # Start printing results
+    while rows_w:
+        res = results.get()
+        if res.size != 1:
+            res = res.reshape(res.size/4,4)
+            for i in range(res.size/4):
+                tmp = res[i]
+                b,index_row,index_col,feat1 = tmp[0],tmp[1],tmp[2],tmp[3]
+                #print b,index_row,index_col,feat1
+                output_ft_1[b][index_row][index_col]=float(feat1)
+                #print output_ft_1[b][index_row][index_col]
+        rows_w -= 1
+    
+    #print output_ft_1[b]
+    
+    for b in range(0,len(input_band_list)):
+        output_list.append(output_ft_1[b][:][:])
+        
+    print time.asctime( time.localtime(time.time()) )
+    print output_list
+

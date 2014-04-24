@@ -80,6 +80,9 @@ def read_image(input_raster,data_type,band_selection):
     Last modified: 18/03/2014
     ''' 
     
+    #TODO: Why not restrict this function to return band_list only? Would make it more clear and not redundant with Read_Image_Parameters.
+    #TODO: You use as default import type uint16 but for export of images you use gdt_float32. 
+    #TODO: Is this the general function to make rasters available to functions? How do you deal with GDAL to OpenCV matrices?
     band_list = []
     
     if data_type == 0: #most of the images (MR and HR) can be read as uint16
@@ -94,7 +97,8 @@ def read_image(input_raster,data_type,band_selection):
         #read all the bands
         for i in range(1,nbands+1):
             inband = inputimg.GetRasterBand(i) 
-            mat_data = inband.ReadAsArray(0,0,cols,rows).astype(data_type)
+            #mat_data = inband.ReadAsArray(0,0,cols,rows).astype(data_type)
+            mat_data = inband.ReadAsArray().astype(data_type)
             band_list.append(mat_data) 
     else:
         #read the single band
@@ -179,7 +183,7 @@ def write_image(band_list,data_type,band_selection,output_raster,rows,cols,geo_t
     outDs = None
 
 
-def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width,pixel_height,x_min,x_max,y_min,y_max):
+def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width=0,pixel_height=0,x_min=0,x_max=0,y_min=0,y_max=0):
     
     '''Conversion from shapefile to raster using GDAL
     
@@ -203,6 +207,8 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width,pixel_he
     Reference: http://pcjericks.github.io/py-gdalogr-cookbook/vector_layers.html
     '''
   
+    #TODO: Explain additional arguments px_W,px_H,x_min,x_max,y_min,y_max
+    
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     data_source = driver_shape.Open(input_shape)
     source_layer = data_source.GetLayer()
@@ -414,6 +420,8 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     Last modified: 24/03/2014
     ''' 
 
+    #TODO: It seems that you transform from a default epsg 4326 and don't allow to define the input or simply read it from the input file
+    #TODO: would use only one argument to define input. 
     #driver definition for shapefile
     driver=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     
@@ -486,29 +494,34 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     prjfile.close()
     
     
-def split_shape(input_layer,output_shape,index):
+def split_shape(input_layer,output_shape,index,option):
     
     '''Extract a single feature from a shapefile
     
     :param input_layer: layer of a shapefile (shapefile layer)
-    :param output_shape: path and name of the output shapefile (temporary file) (*.shp) (string)
+    :param output_shape: path and name of the output shapefile (temporary file, only for 'file' option) (*.shp) (string)
     :param index: index of the feature to extract (integer)
-    :returns:  an output shapefile is created
+    :param option: 'memory' or 'file' depending on the desired output (default is memory) (string)
+    :returns:  an output datasource is returned depending on the chosen driver
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - Mostapha Harb
-    Last modified: 25/03/2014
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 07/04/2014
     ''' 
-
-    #TODO: Why do we need this function? Does not seems like a good idea to do this. Why not simply loop through the features?
     
-    driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
+    if option == 'file':
+        driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
+        if os.path.exists(output_shape):
+            driver.DeleteDataSource(output_shape) 
+        outDS = driver.CreateDataSource(output_shape)
+    else:
+        driver = osgeo.ogr.GetDriverByName('Memory')
+        outDS = driver.CreateDataSource("out")
+        
     layer_defn = input_layer.GetLayerDefn()
     # loop through the input features
     inFeature = input_layer.GetFeature(index)
-    if os.path.exists(output_shape):
-        driver.DeleteDataSource(output_shape) 
-    outDS = driver.CreateDataSource(output_shape)
+    
 
     field_names = [layer_defn.GetFieldDefn(j).GetName() for j in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
         
@@ -539,9 +552,10 @@ def split_shape(input_layer,output_shape,index):
     
     # add the feature to the shapefile
     outLayer.CreateFeature(outFeature)
-    
+    return outDS
     # destroy the features and get the next input feature
     outFeature.Destroy()
     inFeature.Destroy()
         
     outDS.Destroy()
+    

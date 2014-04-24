@@ -7,7 +7,6 @@ adjusted to new package structure by marc
 from sensum.segmentation import *
 from sensum.conversion import *
 from sensum.segmentation_opt import *
-from sensum.misc import *
 import osgeo.ogr
 
 ## Parameters ##########################################################################
@@ -15,7 +14,7 @@ input_image = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\pansharp.TIF" #o
 input_shape = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\reference_polygon_2.shp" #reference polygon
 path = "F:\\Sensum_xp\\Izmir\\building_extraction_sup_2\\"
 
-segmentation_name = 'Watershed'
+segmentation_name = 'Felzenszwalb'
 nloops = 10
 select_criteria = 4 #default value, combination of extra and intra region pixels
 ########################################################################################
@@ -32,7 +31,7 @@ if inDS is None:
 inLayer = inDS.GetLayer()
 numFeatures = inLayer.GetFeatureCount()
 print 'Number of reference features: ' + str(numFeatures)
-temp_shape = input_shape[:-4]+'_temp.shp'
+#temp_shape = input_shape[:-4]+'_temp.shp'
 patches_list = []
 patches_geo_transform_list = []
 reference_list = []
@@ -41,14 +40,15 @@ ref_geo_transform_list = []
 for n in range(0,numFeatures):
     
     #separate each polygon creating a temp file
-    split_shape(inLayer,temp_shape,n)
+    temp = split_shape(inLayer,'',n,'memory')
     
     #conversion of the temp file to raster
-    temp = driver_shape.Open(temp_shape, 0)
+    #temp = driver_shape.Open(temp_shape, 0)
     temp_layer = temp.GetLayer()
     
     reference_matrix, ref_geo_transform = polygon2array(temp_layer,geo_transform[1],abs(geo_transform[5])) 
-    driver_shape.DeleteDataSource(temp_shape)
+    temp.Destroy()
+    #driver_shape.DeleteDataSource(temp_shape)
     reference_list.append(reference_matrix)
     ref_geo_transform_list.append(ref_geo_transform)
     

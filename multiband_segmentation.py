@@ -9,9 +9,9 @@ import time
 
 ### Parameters #########################################################################################
 input_raster = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'
-output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\baatz_test.shp'
+output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\edison_test.shp'
 
-segmentation_name = 'region_growing' #felzenszwalb,quickshift,edison,meanshift,watershed,mprofiles,baatz,region_growing
+segmentation_name = 'edison' #felzenszwalb,quickshift,edison,meanshift,watershed,mprofiles,baatz,region_growing
 
 '''
 Edit segmentation parameters according to the desired segmentation, 0 for default values
