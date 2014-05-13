@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -21,10 +23,20 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
@@ -174,7 +186,7 @@ def spectral_segments(input_band,dn_value,input_band_segmentation,indexes_list,b
     :param input_band: 2darray containing a single band of the original image (numpy array)
     :param dn_value: unique value associated to each segment (integer)
     :param input_band_segmentation: 2darray containing the results of the segmentation (numpy array)
-    :param indexes_list: list of strings with codes related to indexes (mean, mode, standard_deviation, max_brightness, min_brightness, ndvi_mean, ndvi_standard_deviation, weighted_brightness) (list of strings)
+    :param indexes_list: list of strings with codes related to indexes (mean, mode, std, max_br, min_br, ndvi_mean, ndvi_std, weigh_br) (list of strings)
     :param bands_number: parameter used by the weighted brightness (set to 0 if not needed) (integer)
     :returns:  list of values corresponding to computed indexes following the indexes_list order (list of floats)
     :raises: AttributeError, KeyError
@@ -259,10 +271,11 @@ def texture_segments(input_band,dn_value,input_band_segmentation,indexes_list):
 
     ystart = np.amin(seg_pos[0])
     yend = np.amax(seg_pos[0])
-    #data_glcm = np.zeros((yend-ystart+1,xend-xstart+1)) 
+    #data_glcm = np.zeros((yend-ystart+1,xend-xstart+1))
+    
     data_glcm = input_band[ystart:yend+1,xstart:xend+1] #TODO: is this redefinition intended?
     
-    glcm = greycomatrix(data_glcm, [1], [0], levels=256, symmetric=False, normed=True)
+    glcm = greycomatrix(data_glcm, [1], [0], levels=64, symmetric=False, normed=True)
     for indx in range(0,len(indexes_list)):
         index_glcm = greycoprops(glcm, indexes_list[indx])[0][0]
         output_list.append(index_glcm)    
@@ -290,32 +303,9 @@ def texture_moving_window(input_band_list,window_dimension,index,quantization_fa
     #TODO: Always provide full list of options in function description (e.g. which features are supported here?)
     #TODO: Output should be array. Only dissimilarity and only 3 bands? 
     
-    band_list_q = []
+    band_list_q = linear_quantization(input_band_list,quantization_factor)
     output_list = []
     
-    #Quantization process
-    q_factor = quantization_factor - 1 
-    for b in range(0,len(input_band_list)):
-        inmatrix = input_band_list[b].reshape(-1)
-        out = np.bincount(inmatrix)
-        tot = inmatrix.shape[0]
-        freq = (out.astype(np.float32)/float(tot))*100 #frequency for each value
-        cumfreqs = np.cumsum(freq)
-    
-        first = np.where(cumfreqs>1.49)[0][0] #define occurrence limits for the distribution
-        last = np.where(cumfreqs>97.8)[0][0]
-        input_band_list[b][np.where(input_band_list[b]>last)] = last
-        input_band_list[b][np.where(input_band_list[b]<first)] = first
- 
-        #max_matrix = np.ones(input_band_list[0].shape)*np.amax(input_band_list[b])
-        #q_matrix = np.ones(input_band_list[0].shape)*q_factor
-        k1 = float(q_factor)/float((last-first)) #k1 term of the quantization formula
-        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape) #k2 term of the quantization formula
-        out_matrix = np.floor(input_band_list[b]*k1+k2) #take the integer part
-        out_matrix2 = out_matrix-np.ones(out_matrix.shape)
-        out_matrix2.astype(np.uint8)
-
-        band_list_q.append(out_matrix2) #list of quantized 2darrays
                
     feat1 = 0.0
     
@@ -411,32 +401,9 @@ if __name__ == '__main__':
     index = 'dissimilarity'
     quantization_factor = 64
     
-    band_list_q = []
+    band_list_q = linear_quantization(input_band_list,quantization_factor)
     output_list = []
     
-    #Quantization process
-    q_factor = quantization_factor - 1 
-    for b in range(0,len(input_band_list)):
-        inmatrix = input_band_list[b].reshape(-1)
-        out = np.bincount(inmatrix)
-        tot = inmatrix.shape[0]
-        freq = (out.astype(np.float32)/float(tot))*100 #frequency for each value
-        cumfreqs = np.cumsum(freq)
-    
-        first = np.where(cumfreqs>1.49)[0][0] #define occurrence limits for the distribution
-        last = np.where(cumfreqs>97.8)[0][0]
-        input_band_list[b][np.where(input_band_list[b]>last)] = last
-        input_band_list[b][np.where(input_band_list[b]<first)] = first
- 
-        #max_matrix = np.ones(input_band_list[0].shape)*np.amax(input_band_list[b])
-        #q_matrix = np.ones(input_band_list[0].shape)*q_factor
-        k1 = float(q_factor)/float((last-first)) #k1 term of the quantization formula
-        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape) #k2 term of the quantization formula
-        out_matrix = np.floor(input_band_list[b]*k1+k2) #take the integer part
-        out_matrix2 = out_matrix-np.ones(out_matrix.shape)
-        out_matrix2.astype(np.uint8)
-
-        band_list_q.append(out_matrix2) #list of quantized 2darrays
                
     feat1 = 0.0
     

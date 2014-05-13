@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia 
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -20,10 +22,20 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
@@ -70,6 +82,8 @@ def shadow_length(input_band,latitude,longitude,date):
     ''' 
     
     #TODO: Problem with Sun() function in ephem.
+    #TODO: which kind of raster input is required? not clear from description.
+    #TODO: length of shadow from were to were? Building location information needed?
     
     o = ephem.Observer()
     o.lat, o.long,o.date = latitude,longitude,date

@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -20,10 +22,20 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
@@ -120,6 +132,9 @@ def create_extended_patch(input_band_list,reference_band,input_band_geo_transfor
         patch_geo_transform = (new_origins[0],input_band_geo_transform[1],input_band_geo_transform[2],new_origins[1],input_band_geo_transform[4],input_band_geo_transform[5])  
         
         return output_band_list,patch_geo_transform
+    
+    else:
+        return 0,0
         
         
 def evaluation(input_band,reference_band,input_band_geo_transform,ref_geo_transform,select_criteria):#,ref_obj_num,band_number):#d for looping on the objects#z for looping on the bands

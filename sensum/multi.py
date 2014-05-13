@@ -1,8 +1,51 @@
+'''
+.. module:: multi
+   :platform: Unix, Windows
+   :synopsis: This module includes functions related to the high-level classification of multi-spectral satellite images.
+
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
+'''
+'''
+---------------------------------------------------------------------------------
+Created on April 28, 2014
+Last modified on May 13, 2014
+
+---------------------------------------------------------------------------------
+Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
+         vUlnerability and recovery Monitoring (SENSUM)
+
+Co-funded by the European Commission under FP7 (Seventh Framework Programme)
+THEME [SPA.2012.1.1-04] Support to emergency response management
+Grant agreement no: 312972
+
+---------------------------------------------------------------------------------
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
+---------------------------------------------------------------------------------
+'''
+
 import multiprocessing
 import sys
 import time
 
 class Multi(object):
+    
+    
     def __init__(self, num_consumers=0):
         # Establish communication queues
         self.tasks = multiprocessing.JoinableQueue()

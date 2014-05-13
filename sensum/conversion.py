@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -21,10 +23,20 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
@@ -181,6 +193,43 @@ def write_image(band_list,data_type,band_selection,output_raster,rows,cols,geo_t
     outDs.SetGeoTransform(geo_transform)
     outDs.SetProjection(projection)
     outDs = None
+
+
+def linear_quantization(input_band_list,quantization_factor):
+    
+    '''Quantization of all the input bands cutting the tails of the distribution
+    
+    :param input_band_list: list of 2darrays (list of 2darrays)
+    :param quantization_factor: number of levels as output (integer)
+    :returns:  list of values corresponding to the quantized bands (list of 2darray)
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 12/05/2014
+    '''
+    band_list_q = []
+    q_factor = quantization_factor - 1
+    for b in range(0,len(input_band_list)):
+        inmatrix = input_band_list[b].reshape(-1)
+        out = np.bincount(inmatrix)
+        tot = inmatrix.shape[0]
+        freq = (out.astype(np.float32)/float(tot))*100 #frequency for each value
+        cumfreqs = np.cumsum(freq)
+    
+        first = np.where(cumfreqs>1.49)[0][0] #define occurrence limits for the distribution
+        last = np.where(cumfreqs>97.8)[0][0]
+        input_band_list[b][np.where(input_band_list[b]>last)] = last
+        input_band_list[b][np.where(input_band_list[b]<first)] = first
+
+        k1 = float(q_factor)/float((last-first)) #k1 term of the quantization formula
+        k2 = np.ones(input_band_list[b].shape)-k1*first*np.ones(input_band_list[b].shape) #k2 term of the quantization formula
+        out_matrix = np.floor(input_band_list[b]*k1+k2) #take the integer part
+        out_matrix2 = out_matrix-np.ones(out_matrix.shape)
+        out_matrix2.astype(np.uint8)
+
+        band_list_q.append(out_matrix2) #list of quantized 2darrays
+    
+    return band_list_q
 
 
 def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width=0,pixel_height=0,x_min=0,x_max=0,y_min=0,y_max=0):
@@ -494,7 +543,7 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     prjfile.close()
     
     
-def split_shape(input_layer,output_shape,index,option):
+#def split_shape(input_layer,output_shape,index,option):
     
     '''Extract a single feature from a shapefile
     
@@ -508,7 +557,7 @@ def split_shape(input_layer,output_shape,index,option):
     Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
     Last modified: 07/04/2014
     ''' 
-    
+    '''
     if option == 'file':
         driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
         if os.path.exists(output_shape):
@@ -558,4 +607,4 @@ def split_shape(input_layer,output_shape,index,option):
     inFeature.Destroy()
         
     outDS.Destroy()
-    
+    '''

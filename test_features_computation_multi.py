@@ -1,7 +1,50 @@
+'''
+.. module:: test_features_computation_multi
+   :platform: Unix, Windows
+   :synopsis: Example of feature extraction using a multiprocessing approach
+
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia 
+'''
+'''
+---------------------------------------------------------------------------------
+Created on Apr 28, 2014
+Last modified on May 12, 2014
+
+---------------------------------------------------------------------------------
+Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
+         vUlnerability and recovery Monitoring (SENSUM)
+
+Co-funded by the European Commission under FP7 (Seventh Framework Programme)
+THEME [SPA.2012.1.1-04] Support to emergency response management
+Grant agreement no: 312972
+
+---------------------------------------------------------------------------------
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
+---------------------------------------------------------------------------------
+'''
 
 import time
+#import os,sys
+#sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+#sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+#os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 from sensum.conversion import *
-from sensum.segmentation import *
 from sensum.features import *
 from sensum.multi import *
 
@@ -9,9 +52,9 @@ from sensum.multi import *
 
 input_file = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'    #name of the input file
 segmentation_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005.shp'
-output_shape = 'F:\Sensum_xp\Izmir\\wetransfer-749d73\\watershed_005_features_multi_all.shp' #name of the output shapefile
-indexes_list_spectral = ['mean','mode','std','max_br','min_br','weigh_br','ndvi_mean','ndvi_std']
-indexes_list_texture = ['contrast', 'energy', 'homogeneity', 'correlation', 'dissimilarity', 'ASM']
+output_shape = 'F:\Sensum_xp\Izmir\\wetransfer-749d73\\watershed_005_features_multi_q.shp' #name of the output shapefile
+indexes_list_spectral = ['mean','mode','std']
+indexes_list_texture = ['contrast', 'homogeneity',]
 
 ############################################################################################################################
 
@@ -67,9 +110,9 @@ if __name__ == '__main__':
     wb_comp = []
     #Read original image - base layer
     input_list = read_image(input_file,np.uint16,0)
-    input_list_tf = read_image(input_file,np.uint8,0) #different data type necessary for texture features
+    #input_list_tf = read_image(input_file,np.uint8,0) #different data type necessary for texture features
     rows,cols,nbands,geo_transform,projection = read_image_parameters(input_file)
-
+    input_list_tf = linear_quantization(input_list,64)
     #Conversion of the provided segmentation shapefile to raster for further processing
     shp2rast(segmentation_shape, segmentation_shape[:-4]+'.TIF', rows, cols, 'DN')
     seg_list = read_image(segmentation_shape[:-4]+'.TIF',np.int32,0)

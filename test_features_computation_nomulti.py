@@ -1,257 +1,173 @@
 '''
+.. module:: test_features_computation_nomulti
+   :platform: Unix, Windows
+   :synopsis: Example of feature extraction without using a multiprocessing approach
+
+.. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
+.. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia 
+'''
+'''
+---------------------------------------------------------------------------------
+Created on Oct 21, 2013
+Last modified on May 12, 2014
+
+---------------------------------------------------------------------------------
+Project: Framework to integrate Space-based and in-situ sENSing for dynamic 
+         vUlnerability and recovery Monitoring (SENSUM)
+
+Co-funded by the European Commission under FP7 (Seventh Framework Programme)
+THEME [SPA.2012.1.1-04] Support to emergency response management
+Grant agreement no: 312972
+
+---------------------------------------------------------------------------------
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
+---------------------------------------------------------------------------------
+'''
+'''
 Created on Oct 21, 2013
 @author: daniele
 adjusted to new package structure by marc
 '''
 
 import time
+import os,sys
+#sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+#sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+#os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 from sensum.conversion import *
-from sensum.segmentation import *
 from sensum.features import *
 
 # Parameters to set ########################################################################################################
 
-path = '/home/marc/eclipse_data/sensum_testdata/Izmir/building_extraction_sup/'
-input_file = 'pansharp.TIF'    #name of the input file
-segmentation_file = 'Buildings8_watershed_v6.TIF'    #name of the raster file containing segmentation results
-segmentation_vector_file = 'Buildings8_watershed_v6.shp'
-output_type = 'table'    #type of the produced output (table for vector, segment for raster); default is table
-output_vector_file = 'Buildings8_watershed_v6_features.shp' #name of the output shapefile
-
-#optional in case of 'table' as output_type, necessary in case of 'segment' as output_type
-output_image_spectral = 'spectral_features.TIF' #output name for raster with single band features
-output_image_multispectral = 'multispectral_features.TIF'   #output name for raster with multiband features
-output_image_textural = 'textural_features.TIF' #output name for raster with textural features
+input_file = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'    #name of the input file
+segmentation_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005.shp'
+output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005_features_quantized.shp' #name of the output shapefile
+indexes_list_spectral = ['mean','mode','std'] #possible values: 'mean', 'mode', 'std', 'max_br', 'min_br', 'ndvi_mean', 'ndvi_std', 'weigh_br'
+indexes_list_texture = ['contrast','homogeneity'] #possible values: 'contrast', 'energy', 'homogeneity', 'correlation', 'dissimilarity', 'ASM'
 
 ############################################################################################################################
 
 start_time = time.time()
-result_single = []
-result_multi = []
-result_texture = []
-input_data_list = []
-result_single_shape = []
-result_single_shape_bands = []
-result_texture_shape = []
-result_texture_shape_bands = []
-result_multi_shape = []
+ndvi_comp = []
+wb_comp = []
+#Read original image - base layer
+input_list = read_image(input_file,np.uint16,0)
+#input_list_tf = read_image(input_file,np.uint8,0) #different data type necessary for texture features
+rows,cols,nbands,geo_transform,projection = read_image_parameters(input_file)
+input_list_tf = linear_quantization(input_list,64)
+#Conversion of the provided segmentation shapefile to raster for further processing
+shp2rast(segmentation_shape, segmentation_shape[:-4]+'.TIF', rows, cols, 'DN')
+seg_list = read_image(segmentation_shape[:-4]+'.TIF',np.int32,0)
 
-
-#print 'FZ'
-#watershed_otb(path+input_file,path+segmentation_vector_file,'vector',0,0)
-#print 'Shp2Rast'
-#rows,cols,nbands,geotransform,projection = Read_Image_Parameters(path+input_file)
-#Shp2Rast(path+segmentation_vector_file,path+segmentation_file,rows,cols,'DN',0,0)
-
-#if os.path.exists(path + output_vector_file):
- #   os.remove(path+output_vector_file)
-    
-
-rows,cols,nbands,input_list,geo_transform,projection = Read_Image(path+input_file,np.uint16)
-rows,cols,nbands,input_list_tf,geo_transform,projection = Read_Image(path+input_file,np.uint8) #different type for textural features
-Shp2Rast(path+segmentation_vector_file,path+segmentation_file,rows,cols,'Polygon_N',0,0,0,0,0,0)
-rows,cols,nbands_seg,seg_list,geo_transform,projection = Read_Image(path+segmentation_file,np.int32)
-band_sum = np.zeros((rows,cols))
-ndvi = np.zeros((rows,cols))
-if nbands == 4:
+if (('ndvi_mean' in indexes_list_spectral) or ('ndvi_std' in indexes_list_spectral)) and nbands > 3:
     ndvi = (input_list[3]-input_list[2]) / (input_list[3]+input_list[2]+0.000001)
-if nbands>1:    
-    for b in range(0,len(input_list)):
+    ndvi_comp = [s for s in indexes_list_spectral if 'ndvi_mean' in s or 'ndvi_std' in s]
+
+if 'weigh_br' in indexes_list_spectral:
+    band_sum = np.zeros((rows,cols))
+    for b in range(0,nbands):
         band_sum = band_sum + input_list[b]
+    wb_comp = [s for s in indexes_list_spectral if 'weigh_br' in s]
+    
+ind_list_spectral = [s for s in indexes_list_spectral if 'ndvi_mean' not in s or 'ndvi_std' not in s or 'weigh_br' not in s]
+print ind_list_spectral
+#read input shapefile
+driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
+infile=driver_shape.Open(segmentation_shape,0)
+inlayer=infile.GetLayer()
 
-end_seg = np.amax(seg_list[0]) 
-start_seg = np.amin(seg_list[0])
-print start_seg,end_seg
-#output as a shapefile    
-if (output_type == 'table'):
-    driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
-    infile=driver_shape.Open(path+segmentation_vector_file,0)
-    inlayer=infile.GetLayer()
-    
-    outfile=driver_shape.CreateDataSource(path+output_vector_file)
-    outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
-    
-    #infeature=inlayer.GetFeature(0)
-    layer_defn = inlayer.GetLayerDefn()
-    infeature = inlayer.GetNextFeature()
+#create output shapefile 
+outfile=driver_shape.CreateDataSource(output_shape)
+outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
 
-    dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
-    outlayer.CreateField(dn_def)
-    polygon_n_def = osgeo.ogr.FieldDefn('Polygon_N', osgeo.ogr.OFTInteger)
-    outlayer.CreateField(polygon_n_def)
-    
+layer_defn = inlayer.GetLayerDefn()
+infeature = inlayer.GetNextFeature()
+
+dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
+outlayer.CreateField(dn_def)
+#max_brightness, min_brightness, ndvi_mean, ndvi_standard_deviation, weighted_brightness
+for b in range(1,nbands+1):
+    for si in range(0,len(ind_list_spectral)):
+        field_def = osgeo.ogr.FieldDefn(ind_list_spectral[si] + str(b), osgeo.ogr.OFTReal)
+        outlayer.CreateField(field_def)
+    if ndvi_comp:
+        for nd in range(0,len(ndvi_comp)):
+            field_def = osgeo.ogr.FieldDefn(ndvi_comp[nd] + str(b), osgeo.ogr.OFTReal)
+            outlayer.CreateField(field_def)
+    if wb_comp:
+        field_def = osgeo.ogr.FieldDefn(wb_comp[0] + str(b), osgeo.ogr.OFTReal)
+        outlayer.CreateField(field_def)
+    for sp in range(0,len(indexes_list_texture)):
+        if len(indexes_list_texture[sp]+str(b)) > 10:
+            cut = len(indexes_list_texture[sp]+str(b)) - 10 
+            field_def = osgeo.ogr.FieldDefn(indexes_list_texture[sp][:-cut] + str(b), osgeo.ogr.OFTReal)
+        else:
+            field_def = osgeo.ogr.FieldDefn(indexes_list_texture[sp] + str(b), osgeo.ogr.OFTReal)
+        outlayer.CreateField(field_def)
+      
+feature_def = outlayer.GetLayerDefn()
+n_feature = inlayer.GetFeatureCount()
+i = 1
+
+#loop through segments
+while infeature:
+    print str(i) + ' of ' + str(n_feature)
+    i = i+1
+    # get the input geometry
+    geom = infeature.GetGeometryRef()
+    # create a new feature
+    outfeature = osgeo.ogr.Feature(feature_def)
+    # set the geometry and attribute
+    outfeature.SetGeometry(geom)
+    #field_names = [layer_defn.GetFieldDefn(i).GetName() for i in range(layer_defn.GetFieldCount())]
+    dn = infeature.GetField('DN')
+    outfeature.SetField('DN',dn)
+ 
     for b in range(1,nbands+1):
         
-        mean_def = osgeo.ogr.FieldDefn('Mean' + str(b), osgeo.ogr.OFTReal)
-        outlayer.CreateField(mean_def)
-        std_def = osgeo.ogr.FieldDefn('Std' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(std_def)
-        maxbr_def = osgeo.ogr.FieldDefn('MaxBr' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(maxbr_def)
-        minbr_def = osgeo.ogr.FieldDefn('MinBr' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(minbr_def)
+        spectral_list = spectral_segments(input_list[b-1], dn, seg_list[0], ind_list_spectral, nbands)
+        for si in range(0,len(indexes_list_spectral)):
+            outfeature.SetField(indexes_list_spectral[si] + str(b),spectral_list[si])
         
-        mode_def = osgeo.ogr.FieldDefn('Mode' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(mode_def)
-        
-        contrast_def = osgeo.ogr.FieldDefn('Contr' + str(b), osgeo.ogr.OFTReal)
-        outlayer.CreateField(contrast_def)
-        energy_def = osgeo.ogr.FieldDefn('Energy' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(energy_def)
-        homogeneity_def = osgeo.ogr.FieldDefn('Homoge' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(homogeneity_def)
-        correlation_def = osgeo.ogr.FieldDefn('Correl' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(correlation_def)
-        dissimilarity_def = osgeo.ogr.FieldDefn('Dissi' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(dissimilarity_def)
-        asm_def = osgeo.ogr.FieldDefn('Asm' + str(b),osgeo.ogr.OFTReal)
-        outlayer.CreateField(asm_def)
-        
-    if (nbands>1):
-        ndvi_mean_def = osgeo.ogr.FieldDefn('Ndvi_Mean',osgeo.ogr.OFTReal)
-        outlayer.CreateField(ndvi_mean_def)
-        ndvi_std_def = osgeo.ogr.FieldDefn('Ndvi_Std',osgeo.ogr.OFTReal)
-        outlayer.CreateField(ndvi_std_def)
-        wb_def = osgeo.ogr.FieldDefn('Wb',osgeo.ogr.OFTReal)
-        outlayer.CreateField(wb_def)
-       
-    feature_def = outlayer.GetLayerDefn()
-    n_feature = inlayer.GetFeatureCount()
-    i = 1
-    while infeature:
-        print str(i) + ' of ' + str(n_feature)
-        i = i+1
-        # get the input geometry
-        geom = infeature.GetGeometryRef()
-        # create a new feature
-        outfeature = osgeo.ogr.Feature(feature_def)
-        # set the geometry and attribute
-        outfeature.SetGeometry(geom)
-        #field_names = [layer_defn.GetFieldDefn(i).GetName() for i in range(layer_defn.GetFieldCount())]
-        dn = infeature.GetField('DN')
-        outfeature.SetField('DN',dn)
-        polygon_n = infeature.GetField('Polygon_N')
-        outfeature.SetField('Polygon_N',polygon_n)
-        #print 'DN: ' + str(dn)
-        for b in range(1,nbands+1):
-            #print b
-            #print len(result_single_shape_bands[b])
-            mean,std,maxbr,minbr,mode = spectral_features(polygon_n,input_list[b-1],seg_list[0])
+        texture_list = texture_segments(input_list_tf[b-1],dn,seg_list[0],indexes_list_texture)
+        for sp in range(0,len(indexes_list_texture)):
+            if len(indexes_list_texture[sp]+str(b)) > 10:
+                outfeature.SetField(indexes_list_texture[sp][:-cut] + str(b),texture_list[sp])
+            else:
+                outfeature.SetField(indexes_list_texture[sp] + str(b),texture_list[sp])
+        if ndvi_comp:
+            ndvi_list = spectral_segments(input_list[b-1], dn, seg_list[0], ndvi_comp, nbands)
+            for nd in range(0,len(ndvi_comp)):
+                outfeature.SetField(ndvi_comp[nd] + str(b),ndvi_list[nd])
+        if wb_comp:
+            wb = spectral_segments(input_list[b-1], dn, seg_list[0], wb_comp, nbands)
+            outfeature.SetField(wb_comp[0] + str(b),wb[0])
             
-            outfeature.SetField('Mean' + str(b),mean)
-            outfeature.SetField('Std' + str(b),std)
-            outfeature.SetField('MaxBr' + str(b),maxbr)
-            outfeature.SetField('MinBr' + str(b),minbr)
-            
-            outfeature.SetField('Mode' + str(b),mode)
-            
-            contrast,energy,homogeneity,correlation,dissimilarity,asm = textural_features(polygon_n,input_list_tf[b-1],seg_list[0])
-            outfeature.SetField('Contr' + str(b),contrast)
-            outfeature.SetField('Energy' + str(b),energy*100)
-            outfeature.SetField('Homoge' + str(b),homogeneity)
-            outfeature.SetField('Correl' + str(b),correlation)
-            outfeature.SetField('Dissi' + str(b),dissimilarity)
-            outfeature.SetField('Asm' + str(b),asm*1000)
-            
-        if (nbands>1):
-            ndvi_mean,ndvi_std,wb = multispectral_features(polygon_n,band_sum,ndvi,seg_list[0],nbands)
-            outfeature.SetField('Ndvi_Mean',ndvi_mean)
-            outfeature.SetField('Ndvi_Std',ndvi_std)
-            outfeature.SetField('Wb',wb)
-           
-        outlayer.CreateFeature(outfeature)
-        outfeature.Destroy()
-        infeature = inlayer.GetNextFeature()
-    
-    shutil.copyfile(path+segmentation_vector_file[:-4]+'.prj', path+output_vector_file[:-4]+'.prj')
-    print 'Output created: ' + output_vector_file
-    # close the shapefiles
-    infile.Destroy()
-    outfile.Destroy()
-'''
-#output as a raster    
-if (output_type == 'segment'):
-    outmask_mean = np.zeros((rows,cols))
-    outmask_std = np.zeros((rows,cols))
-    outmask_maxbr = np.zeros((rows,cols))
-    outmask_minbr = np.zeros((rows,cols))
-    outmask_mode = np.zeros((rows,cols))
-    
-    outmask_contrast = np.zeros((rows,cols))
-    outmask_energy = np.zeros((rows,cols))
-    outmask_homogeneity = np.zeros((rows,cols))
-    outmask_correlation = np.zeros((rows,cols))
-    outmask_dissimilarity = np.zeros((rows,cols))
-    outmask_asm = np.zeros((rows,cols))
-    
-    outmask_ndvi_mean = np.zeros((rows,cols))
-    outmask_ndvi_std = np.zeros((rows,cols))
-    outmask_wb = np.zeros((rows,cols))
-    
-    out_img_single = driver.Create(path+output_image_spectral,cols,rows,5,GDT_Float32)
-    out_img_multi = driver.Create(path+output_image_multispectral,cols,rows,3,GDT_Float32)
-    out_img_textural = driver.Create(path+output_image_textural,cols,rows,6,GDT_Float32)
-    
-    out_img_single.SetGeoTransform(inb.GetGeoTransform())
-    out_img_single.SetProjection(inb.GetProjection())
-    out_img_multi.SetGeoTransform(inb.GetGeoTransform())
-    out_img_multi.SetProjection(inb.GetProjection())
-    out_img_textural.SetGeoTransform(inb.GetGeoTransform())
-    out_img_textural.SetProjection(inb.GetProjection())
-    
-    for p in range(0,processors):
-        outmask_mean = outmask_mean + result_single[p][0]
-        outmask_std = outmask_std + result_single[p][1]
-        outmask_maxbr = outmask_maxbr + result_single[p][2]
-        outmask_minbr = outmask_minbr + result_single[p][3]
-        outmask_mode = outmask_mode + result_single[p][4]
-        
-        outmask_contrast = outmask_contrast + result_texture[p][0]
-        outmask_energy = outmask_energy + result_texture[p][1]
-        outmask_homogeneity = outmask_homogeneity + result_texture[p][2]
-        outmask_correlation = outmask_correlation + result_texture[p][3]
-        outmask_dissimilarity = outmask_dissimilarity + result_texture[p][4]
-        outmask_asm = outmask_asm + result_texture[p][5]
-        
-        if (nbands>1):
-            outmask_ndvi_mean = outmask_ndvi_mean + result_multi[p][0]
-            outmask_ndvi_std = outmask_ndvi_std + result_multi[p][1]
-            outmask_wb = outmask_wb + result_multi[p][2]
-        
-    outband_single=out_img_single.GetRasterBand(1)
-    outband_single.WriteArray(outmask_mean,0,0)
-    outband2_single = out_img_single.GetRasterBand(2)
-    outband2_single.WriteArray(outmask_std,0,0)
-    outband3_single = out_img_single.GetRasterBand(3)
-    outband3_single.WriteArray(outmask_maxbr,0,0)
-    outband4_single = out_img_single.GetRasterBand(4)
-    outband4_single.WriteArray(outmask_minbr,0,0)
-    outband5_single = out_img_single.GetRasterBand(5)
-    outband5_single.WriteArray(outmask_mode,0,0)
-    
-    outband_textural = out_img_textural.GetRasterBand(1)
-    outband_textural.WriteArray(outmask_contrast,0,0)
-    outband2_textural = out_img_textural.GetRasterBand(2)
-    outband2_textural.WriteArray(outmask_energy,0,0)
-    outband3_textural = out_img_textural.GetRasterBand(3)
-    outband3_textural.WriteArray(outmask_homogeneity,0,0)
-    outband4_textural = out_img_textural.GetRasterBand(4)
-    outband4_textural.WriteArray(outmask_correlation,0,0)
-    outband5_textural = out_img_textural.GetRasterBand(5)
-    outband5_textural.WriteArray(outmask_dissimilarity,0,0)
-    outband6_textural = out_img_textural.GetRasterBand(6)
-    outband6_textural.WriteArray(outmask_asm,0,0)
-    
-    if (nbands>1):
-        outband_multi=out_img_multi.GetRasterBand(1)
-        outband_multi.WriteArray(outmask_ndvi_mean,0,0)
-        outband2_multi = out_img_multi.GetRasterBand(2)
-        outband2_multi.WriteArray(outmask_ndvi_std,0,0)
-        outband3_multi = out_img_multi.GetRasterBand(3)
-        outband3_multi.WriteArray(outmask_wb,0,0)
- ''' 
-Shp2Rast(path+output_vector_file,output_vector_file[:-4]+'_homogeneity.TIF',rows,cols,'Homoge1',0,0,0,0,0,0)
-Shp2Rast(path+output_vector_file,output_vector_file[:-4]+'_contrast.TIF',rows,cols,'Contr1',0,0,0,0,0,0)
+    outlayer.CreateFeature(outfeature)
+    outfeature.Destroy()
+    infeature = inlayer.GetNextFeature()
+
+shutil.copyfile(segmentation_shape[:-4]+'.prj', output_shape[:-4]+'.prj')
+print 'Output created: ' + output_shape
+# close the shapefiles
+infile.Destroy()
+outfile.Destroy()
+
 end_time = time.time()
 print 'Total time = ' + str(end_time-start_time)    
-    
+#5261.86

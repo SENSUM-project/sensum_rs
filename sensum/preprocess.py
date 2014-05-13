@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -21,18 +23,33 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
+
 import os
 import sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
+print os.environ["PATH"]
 import osgeo.gdal
 from gdalconst import *
-import cv2
+#import cv2
 import numpy as np
 import osgeo.ogr
 import otbApplication
@@ -58,7 +75,10 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 18/03/2014
     ''' 
-     
+
+    #TODO: Why not use gdalwarp?
+    #TODO: would use only one argument to define input image and one to define input shp.
+        
     #os.system('gdalwarp -q -cutline ' + shapefile + ' -crop_to_cutline -of GTiff ' + path + name +' '+ path + name[:-4] + '_city.TIF')
 
     x_list = []
@@ -114,7 +134,8 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     lat_min = float(geoMatrix[3]+y_min*geoMatrix[5])
 
     geotransform = [lon_min,geoMatrix[1],0.0,lat_min,0.0,geoMatrix[5]]
-
+    print x_max,x_min
+    print y_max,y_min
     cols_out = x_max-x_min
     rows_out = y_max-y_min
     
@@ -170,6 +191,8 @@ def layer_split(input_raster,band_selection,data_type):
     Last modified: 18/03/2014
     '''
 
+    #TODO: Do we need this?
+    #TODO: Would rename arguments merge(src_img, dst_dir, option)
     
     band_list = read_image(input_raster,data_type,band_selection)
     rows,cols,nbands,geo_transform,projection = read_image_parameters(input_raster)
@@ -196,13 +219,16 @@ def gcp_extraction(input_band_ref,input_band,ref_geo_transform,output_option):
     Last modified: 19/03/2014
     '''
     #TODO: It takes only a 2d array (so only one image band) and not the full image content?
+    #TODO: 2d array is created by using Read_Image() -> band_list[i]?
+    #TODO: So we have two type of functions: 1. functions that take directly a file (e.g. geotiff) and 2. functions that take an array?
+    #TODO: Would rename function to something like auto_gcp()
     #TODO: Output a list of gcps following the structure required by gdal_transform -> this way we could use gdal for the actual transformation and only focus on a robuts and flexible gcp detection
     #TODO: We should think of an option to manually adjust auto gcps for example using QGIS georeferencer (comment from Dilkushi during skype call 7.3.2014)
     #C:\OSGeo4W\bin
     detector = cv2.FeatureDetector_create("SURF") 
     descriptor = cv2.DescriptorExtractor_create("BRIEF")
     matcher = cv2.DescriptorMatcher_create("BruteForce-Hamming")
-   
+    
     # detect keypoints
     kp1 = detector.detect(input_band_ref)
     kp2 = detector.detect(input_band)
@@ -281,7 +307,6 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
     :returns:  an output file is created
     :raises: AttributeError, KeyError
-    #TODO: So we have two type of functions: 1. functions that take directly a file (e.g. geotiff) and 2. functions that take an array?
     
     Author: Daniele De Vecchi - Mostapha Harb
     Last modified: 19/03/2014
@@ -292,9 +317,9 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     rowsp,colsp,nbands,geo_transform,projection = read_image_parameters(input_raster_panchromatic)
     rowsxs,colsxs,nbands,geo_transform,projection = read_image_parameters(input_raster_multiband)
  
-    scale_rows = round(float(rowsp)/float(rowsxs),4)
-    scale_cols = round(float(colsp)/float(colsxs),4)
-    
+    scale_rows = round(float(rowsp)/float(rowsxs),6)
+    scale_cols = round(float(colsp)/float(colsxs),6)
+    print scale_rows,scale_cols
     #Resampling
     RigidTransformResample = otbApplication.Registry.CreateApplication("RigidTransformResample") 
     # The following lines set all the application parameters: 

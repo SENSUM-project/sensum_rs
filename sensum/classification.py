@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -20,10 +22,20 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
@@ -408,7 +420,7 @@ def class_to_segments(input_raster,input_shape,output_shape):
     rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
     band_list_class = read_image(input_raster,np.int32,0) #read original raster file
     shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
-    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32) #read segmentation raster file
+    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32,0) #read segmentation raster file
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     infile=driver_shape.Open(input_shape)
@@ -518,15 +530,13 @@ def reclassify_raster(input_band,reclass_operation_list):
     return output_band 
     
 
-def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list):
+def extract_from_shape(input_shape,sql_query):
     
     '''Extract a subset of the input shapefile according to the specified attribute field and list of values
     
     :param input_shape: path and name of the input shapefile (*.shp) (string)
-    :param output_shape: path and name of the output shapefile (*.shp) (string)
-    :param desired_field: name of the attribute field to filter (string)
-    :param desired_value_list: list of values to extract (e.g. [0,1,2,3]) (list of integers or floats or strings)
-    :returns:  an output shapefile is created as a subset of the original shapefile
+    :param sql_query: sql query command (string)
+    :returns:  an output layer is created as a subset of the original shapefile
     :raises: AttributeError, KeyError
     
     Author: Daniele De Vecchi - Mostapha Harb
@@ -535,39 +545,8 @@ def extract_from_shape(input_shape,output_shape,desired_field,desired_value_list
 
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     infile=driver_shape.Open(input_shape)
-    inlayer=infile.GetLayer()
-    
-    outfile=driver_shape.CreateDataSource(output_shape)
-    outlayer=outfile.CreateLayer('Features',geom_type=osgeo.ogr.wkbPolygon)
-    
-    layer_defn = inlayer.GetLayerDefn()
-    field_names = [layer_defn.GetFieldDefn(j).GetName() for j in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
-    infeature = inlayer.GetNextFeature()
-    feature_def = outlayer.GetLayerDefn()
-    for j in range(0,len(field_names)):
-        field = infeature.GetFieldDefnRef(field_names[j])
-        outlayer.CreateField(field)
-
-    while infeature:
-        attr_value = infeature.GetField(desired_field)
-        if attr_value in desired_value_list: #check if the record satisfyies the input condition
-            # get the input geometry
-            geom = infeature.GetGeometryRef()
-            # create a new feature
-            outfeature = osgeo.ogr.Feature(feature_def)
-            # set the geometry and attribute
-            outfeature.SetGeometry(geom)
-            
-            for j in range(0,len(field_names)):
-                field = infeature.GetFieldDefnRef(field_names[j])
-                outfeature.SetField(field_names[j],infeature.GetField(field_names[j]))
-                
-            outlayer.CreateFeature(outfeature)
-            outfeature.Destroy() 
-        infeature = inlayer.GetNextFeature()
-    
+    outlayer = infile.ExecuteSQL(sql_query)
+    print outlayer.GetFeatureCount()
     # close the shapefiles
-    infile.Destroy()
-    outfile.Destroy()    
-    
-    shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj')
+    infile.Destroy()   
+    return outlayer

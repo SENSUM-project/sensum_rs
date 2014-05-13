@@ -5,6 +5,8 @@
 
 .. moduleauthor:: Mostapha Harb <mostapha.harb@eucentre.it>
 .. moduleauthor:: Daniele De Vecchi <daniele.devecchi03@universitadipavia.it>
+.. moduleauthor:: Daniel Aurelio Galeazzo <dgaleazzo@gmail.com>
+   :organization: EUCENTRE Foundation / University of Pavia
 '''
 '''
 ---------------------------------------------------------------------------------
@@ -21,16 +23,26 @@ THEME [SPA.2012.1.1-04] Support to emergency response management
 Grant agreement no: 312972
 
 ---------------------------------------------------------------------------------
-License: This program is free software; you can redistribute it and/or modify
-         it under the terms of the GNU General Public License as published by
-         the Free Software Foundation; either version 2 of the License, or
-         (at your option) any later version.
+License: This file is part of SensumTools.
+
+    SensumTools is free software: you can redistribute it and/or modify
+    it under the terms of the GNU General Public License as published by
+    the Free Software Foundation, either version 3 of the License, or
+    (at your option) any later version.
+
+    SensumTools is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU General Public License for more details.
+
+    You should have received a copy of the GNU General Public License
+    along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
 
 import os
 import sys
-import osgeo.gdal, gdal
+import osgeo.gdal
 from gdalconst import *
 import numpy as np
 import otbApplication
@@ -83,6 +95,8 @@ def felzenszwalb_skimage(input_band_list, scale, sigma, min_size):
         img = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2],input_band_list[3]))
     if len(input_band_list) == 3:
         img = np.dstack((input_band_list[0],input_band_list[1],input_band_list[2]))
+    if len(input_band_list) == 1:
+        img = input_band_list[0]
     segments_fz = felzenszwalb(img, scale, sigma, min_size)
 
     return segments_fz
@@ -174,7 +188,8 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
     
     #removing the file created by the segmenter after each run
     Folder_files = os.listdir(temp_folder_interimage)
-    file_ = [s for s in Folder_files if "ta_segmenter" in s or "baatz" in s or "regiongrowing" in s]
+    #file_ = [s for s in Folder_files if "ta_segmenter" in s or "baatz" in s or "regiongrowing" in s]
+    file_ = [s for s in Folder_files if "ta_segmenter" in s]
     for f in file_:
         os.remove(temp_folder_interimage+separator+f)
     exe_file =  exe_folder_interimage +separator+ 'ta_baatz_segmenter.exe'   
@@ -191,6 +206,7 @@ def baatz_interimage(input_raster,euc_threshold,compactness,baatz_color,scale,in
     #removing the header lines from the raw file
     with open(output_file + ".raw", 'r+b') as f:
         lines = f.readlines()
+    f.close()    
     #print len(lines)
     
     lines[:] = lines[4:]
