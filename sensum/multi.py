@@ -42,6 +42,10 @@ License: This file is part of SensumTools.
 import multiprocessing
 import sys
 import time
+import os,sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 
 class Multi(object):
     

@@ -46,19 +46,19 @@ adjusted to new package structure by marc
 
 import time
 import os,sys
-#sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-#sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-#os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + ";C:\\OSGeo4W64\\bin"
 from sensum.conversion import *
 from sensum.features import *
 
 # Parameters to set ########################################################################################################
 
-input_file = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'    #name of the input file
-segmentation_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005.shp'
-output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005_features_quantized.shp' #name of the output shapefile
-indexes_list_spectral = ['mean','mode','std'] #possible values: 'mean', 'mode', 'std', 'max_br', 'min_br', 'ndvi_mean', 'ndvi_std', 'weigh_br'
-indexes_list_texture = ['contrast','homogeneity'] #possible values: 'contrast', 'energy', 'homogeneity', 'correlation', 'dissimilarity', 'ASM'
+input_file = 'F:\\Sensum_xp\\Van\\LC81700332013269LGN00\\multi_7_city.tif'    #name of the input file
+segmentation_shape = 'F:\\Sensum_xp\\Van\\LT51700332009194MOR00\\meanshift_10_8.75_yeschange.shp'
+output_shape = 'F:\\Sensum_xp\\Van\\LC81700332013269LGN00\\meanshift_10_8.75_yeschange_ft.shp' #name of the output shapefile
+indexes_list_spectral = ['mean','mode','std','ndvi_mean','ndvi_std'] #possible values: 'mean', 'mode', 'std', 'max_br', 'min_br', 'ndvi_mean', 'ndvi_std', 'weigh_br'
+indexes_list_texture = [] #possible values: 'contrast', 'energy', 'homogeneity', 'correlation', 'dissimilarity', 'ASM'
 
 ############################################################################################################################
 
@@ -147,15 +147,16 @@ while infeature:
         texture_list = texture_segments(input_list_tf[b-1],dn,seg_list[0],indexes_list_texture)
         for sp in range(0,len(indexes_list_texture)):
             if len(indexes_list_texture[sp]+str(b)) > 10:
+                cut = len(indexes_list_texture[sp]+str(b)) - 10
                 outfeature.SetField(indexes_list_texture[sp][:-cut] + str(b),texture_list[sp])
             else:
                 outfeature.SetField(indexes_list_texture[sp] + str(b),texture_list[sp])
         if ndvi_comp:
-            ndvi_list = spectral_segments(input_list[b-1], dn, seg_list[0], ndvi_comp, nbands)
+            ndvi_list = spectral_segments(ndvi, dn, seg_list[0], ndvi_comp, nbands)
             for nd in range(0,len(ndvi_comp)):
                 outfeature.SetField(ndvi_comp[nd] + str(b),ndvi_list[nd])
         if wb_comp:
-            wb = spectral_segments(input_list[b-1], dn, seg_list[0], wb_comp, nbands)
+            wb = spectral_segments(band_sum, dn, seg_list[0], wb_comp, nbands)
             outfeature.SetField(wb_comp[0] + str(b),wb[0])
             
     outlayer.CreateFeature(outfeature)

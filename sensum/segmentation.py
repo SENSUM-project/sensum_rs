@@ -337,6 +337,7 @@ def watershed_otb(input_raster,output_mode,output_file,threshold,level):
         Segmentation.SetParameterFloat("filter.watershed.level",level)
         
     Segmentation.ExecuteAndWriteOutput()
+    Segmentation = None
     
     
 def meanshift_otb(input_raster,output_mode,output_file,spatial_radius,range_radius,threshold,max_iter,min_size):

@@ -43,13 +43,15 @@ License: This file is part of SensumTools.
 import os
 import numpy as np
 import scipy.stats
-import cv2
+import os,sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 from skimage.feature import greycomatrix
 from skimage.feature import greycoprops
 from sensum.conversion import *
 from sensum.classification import *
 import multiprocessing
-import sys
 import time
 
 

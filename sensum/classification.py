@@ -39,9 +39,13 @@ License: This file is part of SensumTools.
 ---------------------------------------------------------------------------------
 '''
 
-import os
+import os,sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + ";C:\\OSGeo4W64\\bin"
 import numpy as np
 import scipy.stats
+import osgeo.gdal
 import osgeo.ogr
 import shutil
 import cv2
@@ -51,6 +55,7 @@ from sensum.conversion import *
 import time
 from sklearn import tree
 from sklearn.ensemble import GradientBoostingClassifier
+import operator
 
 if os.name == 'posix':
     separator = '/'
@@ -259,7 +264,7 @@ def generate_training(input_band_list,input_shape,training_field,pixel_width,pix
     for n in range(0,numFeatures):
         print 'Feature ' + str(n+1) + ' of ' + str(numFeatures)
         #separate each polygon creating a temp file
-        temp = split_shape(inLayer,'',n,'memory') #extract single polygon
+        temp = split_shape(inLayer,n) #extract single polygon
         inFeature = inLayer.GetFeature(n)
         training_def = inFeature.GetField(training_field) #take the class definition for the sample
         #conversion of the temp file to raster
@@ -359,7 +364,7 @@ def supervised_classification_opencv(input_band_list,sample_matrix,train_matrix,
     
         params = dict( kernel_type = cv2.SVM_LINEAR, svm_type = cv2.SVM_C_SVC,C = 10000 ) #definition of the SVM parameters (kernel, type of algorithm and parameter related to the chosen algorithm
         cl = cv2.SVM()
-        cl.train_auto(sample_matrix,train_matrix,None,None,params,10) #creation of the training set forcing the parameters optimization
+        cl.train_auto(sample_matrix,train_matrix,None,None,params,100) #creation of the training set forcing the parameters optimization
         y_val = cl.predict_all(samples) #classification of the input image
         output = y_val.reshape(input_band_list[0].shape).astype(np.uint16) #reshape to the original rows and columns
     
@@ -505,48 +510,70 @@ def confusion_matrix(input_raster,input_shape,reference_field,output_file):
     ComputeConfusionMatrix.ExecuteAndWriteOutput()
     
 
-def reclassify_raster(input_band,reclass_operation_list):
-    
-    '''Reclassify results of a classification according to the operation list
-    
-    :param input_band: 2darray corresponding to single classification band (numpy array)
-    :param reclass_operation_list: list of operations to apply (e.g. '0,1,2,3 = 0') (list of strings)
-    :returns:  an output 2darray is created with the results of the reclassification process
-    :raises: AttributeError, KeyError
-    
-    Author: Daniele De Vecchi - Mostapha Harb
-    Last modified: 24/03/2014
-    '''
-    
-    mask = np.zeros(input_band.shape)
-    for l in range(0,len(reclass_operation_list)):
-        desired_classes,output_class = reclass_operation_list[l].split('=') #decomposition of the input formula
-        class_list = desired_classes.split(',')
-        
-        for c in range(0,len(class_list)):
-            #print int(class_list[c])
-            mask = np.logical_or(np.equal(input_band,int(class_list[c])),mask)
-        output_band = np.choose(mask,(0,int(output_class)))  
-    return output_band 
-    
-
-def extract_from_shape(input_shape,sql_query):
-    
+def extract_from_shape(input_shape,*classes,output_shape='',field_name='Class'):
     '''Extract a subset of the input shapefile according to the specified attribute field and list of values
     
     :param input_shape: path and name of the input shapefile (*.shp) (string)
-    :param sql_query: sql query command (string)
+    :param classes: value of class which want to extract (string)
+    :param output_shape: path and name of the output shapefile (*.shp) (string)
+    :param field_name: name of field to extract (string)
     :returns:  an output layer is created as a subset of the original shapefile
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - Mostapha Harb
-    Last modified: 24/03/2014
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
     '''
 
-    driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
-    infile=driver_shape.Open(input_shape)
-    outlayer = infile.ExecuteSQL(sql_query)
-    print outlayer.GetFeatureCount()
-    # close the shapefiles
-    infile.Destroy()   
-    return outlayer
+    driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
+    inDS = driver.Open(input_shape)
+
+    path,file = os.path.split(input_shape)
+    query = 'SELECT * FROM ' + str(file[:-4]) + ' WHERE '
+    for q in range(len(classes)):
+        if q == 0:
+            query = query + '({} = '.format(field_name) + str(classes[q]) + ')' 
+        else:
+            query = query + ' OR ({} = '.format(field_name) + str(classes[q]) + ')' 
+    inLayer = inDS.ExecuteSQL(query)
+
+    if output_shape == '':
+        driver = osgeo.ogr.GetDriverByName("Memory")
+    outDS = driver.CreateDataSource(output_shape)
+    outDS.CopyLayer(inLayer,"Shadows")
+    return outDS
+
+
+def reclassify_raster(input_band,*operations):
+    '''Reclassify results of a classification according to the operation list
+    
+    :param input_band: 2darray corresponding to single classification band (numpy array)
+    :param operations: list of operations to apply (e.g. '0 where 3', '255 where >3') (strings)
+    :returns: output 2darray is created with the results of the reclassification process
+    :raises: AttributeError, KeyError
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
+    '''
+    ops = ["<",">"]
+    output_band = np.array(input_band)
+    output_band_list = []
+    logic_list = []
+    for operation in operations:
+        value, expression = operation.split(" where ")
+        op = [op for op in ops if op in expression]
+        if op:
+            op = str(op[0])
+            cls = int(expression.strip(op))
+            if op == '<':
+                output_band_list.append(np.where(output_band > cls, output_band, value))
+                logic_list.append(np.where(output_band > cls, 0, 1))
+            else:
+                output_band_list.append(np.where(output_band < cls, output_band, value))
+                logic_list.append(np.where(output_band < cls, 0, 1))
+        else:
+            cls = int(expression)
+            output_band_list.append(np.where(output_band != cls, output_band, value))
+            logic_list.append(np.where(output_band != cls, 0, 1))
+    for i in range(len(operations)):
+        output_band = np.where(logic_list[i] != 1, output_band,output_band_list[i])
+    print output_band

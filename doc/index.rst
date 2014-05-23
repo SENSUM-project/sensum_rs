@@ -3,43 +3,20 @@
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
-Welcome to Sensum's documentation!
-==================================
 
-Contents:
+Sensum
+======
+
+Welcome to Sensum documentation
+
+----
+Menu
+----
 
 .. toctree::
    :maxdepth: 2
 
-
-
-Indices and tables
-==================
+   tutorial
 
 * :ref:`genindex`
 * :ref:`modindex`
-* :ref:`search`
-   
-.. automodule:: sensum.classification
-   :members:
-   
-.. automodule:: sensum.conversion
-   :members:
-   
-.. automodule:: sensum.features
-   :members:
-   
-.. automodule:: sensum.misc
-   :members:
-   
-.. automodule:: sensum.preproccess
-   :members:
-   
-.. automodule:: sensum.secondary_indicators
-   :members:
-   
-.. automodule:: sensum.segmentation_opt
-   :members:
-   
-.. automodule:: sensum.segmentation
-   :members:

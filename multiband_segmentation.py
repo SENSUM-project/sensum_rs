@@ -46,10 +46,10 @@ from sensum.segmentation import *
 import time
 
 ### Parameters #########################################################################################
-input_raster = 'F:\\Sensum_xp\\Izmir\\building_accuracy\\test.tif'
-output_shape = 'F:\\Sensum_xp\\Izmir\\building_accuracy\\test_fz.shp'
+input_raster = 'F:\\Sensum_xp\\Van\\LC81700332013269LGN00\\multi_city.tif'
+output_shape = 'F:\\Sensum_xp\\Van\\LC81700332013269LGN00\\meanshift_r30_s30.shp'
 
-segmentation_name = 'felzenszwalb' #felzenszwalb,quickshift,edison,meanshift,watershed,mprofiles,baatz,region_growing
+segmentation_name = 'meanshift' #felzenszwalb,quickshift,edison,meanshift,watershed,mprofiles,baatz,region_growing
 
 '''
 Edit segmentation parameters according to the desired segmentation, 0 for default values
@@ -78,8 +78,8 @@ scale_ed=0 #scale: scale factor (float, 0 for default)
 '''
 - meanshift
 '''
-spatial_radius_ms=0 #spatial_radius: spatial radius parameter (integer, 0 for default)
-range_radius_ms=0 #range_radius: range radius parameter (float, 0 for default)
+spatial_radius_ms=30 #spatial_radius: spatial radius parameter (integer, 0 for default)
+range_radius_ms=30 #range_radius: range radius parameter (float, 0 for default)
 threshold_ms=0 #threshold: threshold parameter (float, 0 for default)
 max_iter_ms=0 #max_iter: limit on number of iterations (integer, 0 for default)
 min_size_ms=0 #min_size: minimum size parameter (integer, 0 for default)

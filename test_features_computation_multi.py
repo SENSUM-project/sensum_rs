@@ -40,10 +40,11 @@ License: This file is part of SensumTools.
 '''
 
 import time
-#import os,sys
-#sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-#sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-#os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
+import os,sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
+print os.environ["PATH"] 
 from sensum.conversion import *
 from sensum.features import *
 from sensum.multi import *
@@ -52,9 +53,9 @@ from sensum.multi import *
 
 input_file = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\pansharp.TIF'    #name of the input file
 segmentation_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005.shp'
-output_shape = 'F:\Sensum_xp\Izmir\\wetransfer-749d73\\watershed_005_features_multi_q.shp' #name of the output shapefile
+output_shape = 'F:\\Sensum_xp\\Izmir\\wetransfer-749d73\\watershed_005_features_multi_q.shp' #name of the output shapefile
 indexes_list_spectral = ['mean','mode','std']
-indexes_list_texture = ['contrast', 'homogeneity',]
+indexes_list_texture = ['contrast', 'homogeneity']
 
 ############################################################################################################################
 
@@ -105,6 +106,9 @@ class Task(object):
 
 if __name__ == '__main__':
 
+    sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+    sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+    os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
     start_time = time.time()
     ndvi_comp = []
     wb_comp = []

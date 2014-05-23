@@ -47,7 +47,8 @@ import osgeo.ogr
 import osgeo.gdal
 from gdalconst import *
 import numpy as np
-
+import otbApplication
+from sensum.secondary_indicators import *
 if os.name == 'posix':
     separator = '/'
 else:
@@ -543,34 +544,32 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     prjfile.close()
     
     
-#def split_shape(input_layer,output_shape,index,option):
-    
+def split_shape(input_layer,index,option="memory",output_shape="out"):
+   
     '''Extract a single feature from a shapefile
     
     :param input_layer: layer of a shapefile (shapefile layer)
-    :param output_shape: path and name of the output shapefile (temporary file, only for 'file' option) (*.shp) (string)
     :param index: index of the feature to extract (integer)
     :param option: 'memory' or 'file' depending on the desired output (default is memory) (string)
-    :returns:  an output datasource is returned depending on the chosen driver
+    :param output_shape: path and name of the output shapefile (temporary file) (*.shp) (string)
+    :returns:  an output shapefile is created
     :raises: AttributeError, KeyError
-    
-    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
-    Last modified: 07/04/2014
+    Author: Daniele De Vecchi - Mostapha Harb
+    Last modified: 25/03/2014
     ''' 
-    '''
+
+    #TODO: Why do we need this function? Does not seems like a good idea to do this. Why not simply loop through the features?
+    
     if option == 'file':
         driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
-        if os.path.exists(output_shape):
-            driver.DeleteDataSource(output_shape) 
-        outDS = driver.CreateDataSource(output_shape)
-    else:
+    elif option == 'memory':
         driver = osgeo.ogr.GetDriverByName('Memory')
-        outDS = driver.CreateDataSource("out")
-        
     layer_defn = input_layer.GetLayerDefn()
     # loop through the input features
     inFeature = input_layer.GetFeature(index)
-    
+    #if os.path.exists(output_shape):
+        #driver.DeleteDataSource(output_shape) 
+    outDS = driver.CreateDataSource(output_shape) #outDS = driver.CreateDataSource("out")
 
     field_names = [layer_defn.GetFieldDefn(j).GetName() for j in range(layer_defn.GetFieldCount())] #store the field names as a list of strings
         
@@ -601,10 +600,243 @@ def reproject_shapefile(input_shape,output_shape,output_projection):
     
     # add the feature to the shapefile
     outLayer.CreateFeature(outFeature)
-    return outDS
+    
+    if option == 'memory':
+        return outDS
+
     # destroy the features and get the next input feature
     outFeature.Destroy()
     inFeature.Destroy()
-        
     outDS.Destroy()
+    
+
+def smooth_filter_otb(input_raster,output_raster,radius):
+    
+    '''Apply the Meanshift smoothing to the input image
+    
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param output_raster: path and name of the output raster (*.TIF,*.tiff) (string)
+    :param radius: radius parameter (integer, 0 for default)
+    :returns:  an output file is created according to the specified output mode
+    :raises: AttributeError, KeyError
+    
+    Author: Daniele De Vecchi - Daniel Aurelio Galeazzo - Mostapha Harb
+    Last modified: 20/05/2014
+    
+    Reference: http://www.orfeo-toolbox.org/CookBook/CookBooksu91.html#x122-5460005.5.2
+    ''' 
+    
+    # The following line creates an instance of the MeanShiftSmoothing application 
+    MeanShiftSmoothing = otbApplication.Registry.CreateApplication("MeanShiftSmoothing") 
+    
+    if radius == 0:
+        radius = 30
+    # The following lines set all the application parameters: 
+    MeanShiftSmoothing.SetParameterString("in", input_raster) 
+    MeanShiftSmoothing.SetParameterString("fout", output_raster)
+    MeanShiftSmoothing.SetParameterInt("spatialr", radius)
+    MeanShiftSmoothing.SetParameterFloat("ranger", radius) 
+    MeanShiftSmoothing.SetParameterFloat("thres", 0.1) 
+    MeanShiftSmoothing.SetParameterInt("maxiter", 100) 
+     
+    # The following line execute the application 
+    MeanShiftSmoothing.ExecuteAndWriteOutput()
+
+
+class Polygon(object):
+    '''Container for geometry builders draw the minimun and maximum x and y values generated with WindowsMaker.make_coordinates method.
+
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
+    ''' 
+
+    class Square(object):
+        '''Square Builder'''
+
+        def __init__(self,x_min,x_max,y_min,y_max,resize=0):
+            '''    
+            :param x_min,x_max,y_min,y_max: coordinate of minimum and maximum x and y. (float)
+            :param resize: resize value for increase dimension of the form expressed in coordinates as unit of measure (float)
+            ''' 
+            self.x_min,self.x_max,self.y_min,self.y_max,self.resize = x_min,x_max,y_min,y_max,resize
+
+        def add(self):
+            '''Creation of polygon
+
+            :returns: poly: square polygon (ogr.Geometry)
+            '''
+            window = osgeo.ogr.Geometry(osgeo.ogr.wkbLinearRing)
+            window.AddPoint(self.x_min-self.resize, self.y_max+self.resize)
+            window.AddPoint(self.x_max+self.resize, self.y_max+self.resize)
+            window.AddPoint(self.x_max+self.resize, self.y_min-self.resize)
+            window.AddPoint(self.x_min-self.resize, self.y_min-self.resize)
+            window.CloseRings()
+            poly = osgeo.ogr.Geometry(osgeo.ogr.wkbPolygon)
+            poly.AddGeometry(window)
+            return poly
+
+    class Circle(Square):
+        '''Circle Builder'''
+
+        def add(self):
+            '''Creation of polygon
+
+            :returns: poly: circle polygon (ogr.Geometry)
+            '''
+            x_center = (self.x_max+self.x_min)/2
+            y_center = (self.y_max+self.y_min)/2
+            x_dist = math.ceil( math.sqrt( (self.y_max - self.y_min)**2 + (self.x_max - self.x_min)**2 ) ) + self.resize*2 + self.resize*2
+            y_dist = math.ceil( math.sqrt( (self.y_max - self.y_min)**2 + (self.x_max - self.x_min)**2 ) ) + self.resize*2 + self.resize*2
+            radius = max(x_dist,y_dist)/2
+            point = osgeo.ogr.Geometry(osgeo.ogr.wkbPoint)
+            point.AddPoint(x_center,y_center)
+            circle = point.Buffer(radius,40)
+            return circle
+
+
+class WindowsMaker(object):
+    ''' With this class it's possible to make a window around a ogr feature
+
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
     '''
+
+    def __init__(self,inFeature,resize=0):
+        '''
+        :param inFeature: feature on whic make window around (ogr.Feature)
+        :param resize: resize value for increase dimension of the form expressed in coordinates as unit of measure (float)
+        '''
+        self.inFeature = inFeature
+        self.resize = resize
+
+    def make_coordinates(self):
+        '''Build coordinate of minimum and maximum x and y searching the minimum and maximum value of x and y into all point of feature
+
+        :returns: self.x_min,self.x_max,self.y_min,self.y_max: coordinate of minimum and maximum x and y. (float)
+        '''
+        x_list = []
+        y_list = []
+        geom = self.inFeature.GetGeometryRef()
+        ring = geom.GetGeometryRef(0)
+        n_vertex = ring.GetPointCount()
+        #Single polygon case
+        if n_vertex:
+            for i in range(n_vertex):
+                lon,lat,z = ring.GetPoint(i)
+                x_list.append(lon)
+                y_list.append(lat)
+            x_list.sort()
+            self.x_min = x_list[0]
+            self.x_max = x_list[len(x_list)-1]
+            y_list.sort()
+            self.y_min = y_list[0]
+            self.y_max = y_list[len(y_list)-1]
+        #Multipolygon case
+        else:
+            for i in range(ring.GetGeometryCount()+1):
+                multigeom = geom.GetGeometryRef(i)
+                ring = multigeom.GetGeometryRef(0)
+                n_vertex = ring.GetPointCount()
+                for c in range(n_vertex):
+                    lon,lat,z = ring.GetPoint(i)
+                    x_list.append(lon)
+                    y_list.append(lat)
+            x_list.sort()
+            self.x_min = x_list[0]
+            self.x_max = x_list[len(x_list)-1]
+            y_list.sort()
+            self.y_min = y_list[0]
+            self.y_max = y_list[len(y_list)-1]
+        return self.x_min,self.x_max,self.y_min,self.y_max
+        
+    def make_feature(self,geom=None,polygon=Polygon.Square):
+        '''Build the window feauture
+
+        :param geom: Geometry polygon of window (ogr.Geometry)
+        :param polygon: Polygon builder (sensum.Polygon)
+        :returns: feauture built (ogr.Feature)
+        '''
+        if geom == None:
+            self.make_coordinates()
+            geom = polygon(self.x_min,self.x_max,self.y_min,self.y_max,self.resize).add()
+        driver = osgeo.ogr.GetDriverByName('Memory')
+        ds = driver.CreateDataSource("")
+        layer = ds.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
+        outFeature = osgeo.ogr.Feature(layer.GetLayerDefn())
+        outFeature.SetGeometry(geom)
+        self.windowFeature = outFeature
+        return outFeature
+
+    def get_shapeDS(self,inLayer):
+        '''Build a layer with only intersected features of input layer
+
+        :param inLayer: Layer which will be checked. (ogr.Layer)
+        :returns: Dataset of new layer with only feature intersected. (ogr.Dataset)
+        '''
+        driver = osgeo.ogr.GetDriverByName('Memory')
+        outDS = driver.CreateDataSource("ram")
+        outLayer = outDS.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
+        n_features = inLayer.GetFeatureCount()
+        for i in range(n_features):
+            inFeature = inLayer.GetFeature(i)
+            if self.windowFeature.GetGeometryRef().Intersect(inFeature.GetGeometryRef()):
+                outLayer.CreateFeature(inFeature)
+        return outDS
+
+    def get_rasterArray(self,inRaster):
+        '''Tile a raster with dimensions of window maked
+
+        :param inRaster: Raster which will be tiled
+        :returns: list of array represent the raster
+        '''
+        rows = inRaster.RasterYSize
+        cols = inRaster.RasterXSize
+        bands = inRaster.RasterCount
+
+        transform = inRaster.GetGeoTransform()
+        xOrigin = transform[0]
+        yOrigin = transform[3]
+        pixelWidth = transform[1]
+        pixelHeight = transform[5]
+
+        xFirst = int(round((self.x_min - xOrigin) / pixelWidth))
+        yFirst = int(round((self.y_max - yOrigin) / pixelHeight))
+        xLast = int(round((self.x_max - xOrigin) / pixelWidth))
+        yLast = int(round((self.y_min - yOrigin) / pixelHeight))
+
+        #fix resize
+        if xFirst < 0:
+            xFirst = 0
+        if yFirst < 0:
+            yFirst = 0
+
+        x_dimension = xLast - xFirst
+        y_dimension = yLast - yFirst
+
+        #fix resize
+        if xFirst+x_dimension > cols:
+            x_dimension = cols - xFirst
+        if yFirst+y_dimension > rows:
+            y_dimension = rows - yFirst
+    
+        for j in range(bands):
+            band_list = inRaster.GetRasterBand(j+1).ReadAsArray(xFirst,yFirst,x_dimension,y_dimension)
+        print band_list
+
+    def make_shape(self,path):
+        '''Shape file builder with only the window feature into the layer (useful for debugging)
+
+        :param path: Path of shape file (str)
+        '''
+        driver = osgeo.ogr.GetDriverByName('Memory')
+        ds = driver.CreateDataSource("")
+        layer = ds.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
+        poly = self.get_geometry()
+        outFeature = osgeo.ogr.Feature(layer.GetLayerDefn())
+        outFeature.SetGeometry(poly)
+        self.windowFeature = outFeature
+        
+        driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
+        outDS = driver.CreateDataSource(path)
+        outLayer = outDS.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
+        outLayer.CreateFeature(outFeature)

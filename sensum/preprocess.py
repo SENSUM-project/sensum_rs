@@ -49,7 +49,7 @@ os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 print os.environ["PATH"]
 import osgeo.gdal
 from gdalconst import *
-#import cv2
+import cv2
 import numpy as np
 import osgeo.ogr
 import otbApplication
@@ -308,12 +308,12 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     :returns:  an output file is created
     :raises: AttributeError, KeyError
     
-    Author: Daniele De Vecchi - Mostapha Harb
-    Last modified: 19/03/2014
+    Author: Daniele De Vecchi - Mostapha Harb - Daniel Aurelio Galeazzo
+    Last modified: 23/05/2014
     '''
 
     #TODO: Specify in description which pansharpening algorithm iss used by this function
-    
+    fix_tiling_raster(input_raster_multiband,input_raster_panchromatic)
     rowsp,colsp,nbands,geo_transform,projection = read_image_parameters(input_raster_panchromatic)
     rowsxs,colsxs,nbands,geo_transform,projection = read_image_parameters(input_raster_multiband)
  
@@ -378,3 +378,69 @@ def resampling(input_raster,output_raster,output_resolution,resampling_algorithm
     
     RigidTransformResample.ExecuteAndWriteOutput()
     
+    
+def fix_tiling_raster(input_raster1,input_raster2):
+    '''Fix two images dimension for pansharpening issue instroducted by otb 4.0 version (seem to be otb 4.0 bug)
+
+    :param input_raster1: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :param input_raster1: path and name of the input raster file (*.TIF,*.tiff) (string)
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
+    '''
+    minx1,miny1,maxx1,maxy1 = get_coordinate_limit(input_raster1)
+    minx2,miny2,maxx2,maxy2 = get_coordinate_limit(input_raster2)
+
+    #Get cordinate of intersation from 2 raster
+
+    if minx1-minx2 >= 0:
+        new_minx = minx1
+    else:
+        new_minx = minx2
+    if miny1-miny2 >= 0:
+        new_miny = miny1
+    else:
+        new_miny = miny2
+    if maxx1-maxx2 <= 0:
+        new_maxx = maxx1
+    else:
+        new_maxx = maxx2
+    if maxy1-maxy2 <= 0:
+        new_maxy = maxy1
+    else:
+        new_maxy = maxy2
+
+    #Rewrite a raster with new cordinate
+    #TODO   FIX CASE WITHOUT os.getcwd() WHEN FULL PATH IS DECLARED
+    os.system("gdal_translate -of GTiff -projwin "+str(minx)+" "+str(maxy)+" "+str(maxx)+" "+str(miny)+" "+os.getcwd()+'/'+input_raster+" "+os.getcwd()+'/'+input_raster+"_tmp.tif")
+    if os.name == 'posix': 
+        os.system("mv "+os.getcwd()+'/'+input_raster+"_tmp.tif "+os.getcwd()+'/'+input_raster)
+    else:
+        os.system("rename "+os.getcwd()+'/'+input_raster+"_tmp.tif "+os.getcwd()+'/'+input_raster)
+
+
+def get_coordinate_limit(input_raster):
+    '''Get corner cordinate from a raster
+
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :returs: minx,miny,maxx,maxy: points taken from geomatrix (string)
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
+    '''
+    dataset = osgeo.gdal.Open(input_raster, GA_ReadOnly)
+    if dataset is None:
+        print 'Could not open'
+        sys.exit(1)
+    driver = dataset.GetDriver()
+    band = dataset.GetRasterBand(1)
+
+    width = dataset.RasterXSize
+    height = dataset.RasterYSize
+    geoMatrix = dataset.GetGeoTransform()
+    minx = geoMatrix[0]
+    miny = geoMatrix[3] + width*geoMatrix[4] + height*geoMatrix[5] 
+    maxx = geoMatrix[0] + width*geoMatrix[1] + height*geoMatrix[2]
+    maxy = geoMatrix[3]
+
+    return minx,miny,maxx,maxy
