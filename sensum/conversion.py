@@ -42,13 +42,16 @@ License: This file is part of SensumTools.
 
 import os
 import sys
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 import osgeo.osr
 import osgeo.ogr
 import osgeo.gdal
 from gdalconst import *
 import numpy as np
 import otbApplication
-from sensum.secondary_indicators import *
+#from sensum.secondary_indicators import *
 if os.name == 'posix':
     separator = '/'
 else:
@@ -840,3 +843,26 @@ class WindowsMaker(object):
         outDS = driver.CreateDataSource(path)
         outLayer = outDS.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
         outLayer.CreateFeature(outFeature)
+
+
+def normalize_to_L8(input_band_list):
+    
+    '''Normalize the range of values of Landsat 5 and 7 to match Landsat 8
+    
+    :param input_band_list: list of 2darrays (list of 2darrays)
+    :returns:  a list containing the normalized bands as ndarrays (list of arrays).
+    :raises: AttributeError, KeyError
+    
+    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
+    Last modified: 24/06/2014
+    
+    '''
+    out_list = []
+    for b in range(0,len(input_band_list)):
+        matrix = input_band_list[b].astype(np.float32)
+        matrix = (matrix - matrix.min()) / (matrix.max()-matrix.min())
+        matrix = matrix * 65000
+        matrix = matrix.astype(np.int32)
+        out_list.append(matrix)  
+    
+    return out_list 

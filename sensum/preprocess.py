@@ -103,7 +103,6 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     cols = inb.RasterXSize
     rows = inb.RasterYSize
     nbands = inb.RasterCount  
-        
     # loop through the features in the layer
     feature = layer.GetNextFeature()
     while feature:
@@ -134,8 +133,6 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     lat_min = float(geoMatrix[3]+y_min*geoMatrix[5])
 
     geotransform = [lon_min,geoMatrix[1],0.0,lat_min,0.0,geoMatrix[5]]
-    print x_max,x_min
-    print y_max,y_min
     cols_out = x_max-x_min
     rows_out = y_max-y_min
     
@@ -203,7 +200,7 @@ def layer_split(input_raster,band_selection,data_type):
         write_image(band_list,data_type,band_selection,input_raster[:-4]+'_B'+str(band_selection)+'.TIF',rows,cols,geo_transform,projection)  
     
 
-def gcp_extraction(input_band_ref,input_band,ref_geo_transform,output_option):
+def gcp_extraction_old(input_band_ref,input_band,ref_geo_transform,output_option):
     
     '''GCP extraction and filtering using the SURF algorithm
     
@@ -328,14 +325,14 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     RigidTransformResample.SetParameterString("transform.type","id") 
     RigidTransformResample.SetParameterFloat("transform.type.id.scalex", scale_cols) 
     RigidTransformResample.SetParameterFloat("transform.type.id.scaley", scale_rows) 
-    RigidTransformResample.SetParameterInt("ram", 2000)
+    #RigidTransformResample.SetParameterInt("ram", 2000)
     RigidTransformResample.ExecuteAndWriteOutput()
  
     Pansharpening = otbApplication.Registry.CreateApplication("Pansharpening") 
     # Application parameters
     Pansharpening.SetParameterString("inp", input_raster_panchromatic) 
     Pansharpening.SetParameterString("inxs", input_raster_multiband[:-4]+'_resampled.tif') 
-    Pansharpening.SetParameterInt("ram", 2000) 
+    #Pansharpening.SetParameterInt("ram", 2000) 
     Pansharpening.SetParameterString("out", output_raster) 
     Pansharpening.SetParameterOutputImagePixelType("out", 3) 
      
@@ -444,3 +441,193 @@ def get_coordinate_limit(input_raster):
     maxy = geoMatrix[3]
 
     return minx,miny,maxx,maxy
+
+
+def gcp_extraction(image_ref,image_target):
+    
+    '''GCP extraction and filtering using the SURF algorithm
+    
+    :param image_ref: path and name of the input reference file (*.TIF,*.tiff) (string)
+    :param image_target: path and name of the input target file (*.TIF,*.tiff) (string)
+    :returns:  array with best matching points is returned
+    :raises: AttributeError, KeyError
+    
+    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
+    Last modified: 23/05/2014
+    '''
+
+    detector = cv2.FeatureDetector_create("SURF") 
+    descriptor = cv2.DescriptorExtractor_create("BRIEF")
+    matcher = cv2.DescriptorMatcher_create("BruteForce-Hamming")
+
+    img_ref = read_image(image_ref,np.uint8,1)
+    rows_ref,cols_ref,nbands_ref,geotransform_ref,projection_ref = read_image_parameters(image_ref)
+    img_ref_m = np.ma.masked_values(img_ref[0], 0).astype('uint8')
+
+    kp1 = detector.detect(img_ref[0], mask=img_ref_m)
+    k1, d1 = descriptor.compute(img_ref[0], kp1)
+    img_ref = []
+    
+    img_target = read_image(image_target,np.uint8,0)
+    rows_target,cols_target,nbands_target,geotransform_target,projection_target = read_image_parameters(image_target)
+    img_target_m = np.ma.masked_values(img_target[0], 0).astype('uint8')
+    
+    kp2 = detector.detect(img2, mask = img2_m)
+    k2, d2 = descriptor.compute(img2, kp2)
+    img_target = []
+
+    # match the keypoints
+    matches = matcher.match(d1, d2)
+    
+    # visualize the matches
+    dist = [m.distance for m in matches] #extract the distances
+  
+    thres_dist = 100
+    sel_matches = [m for m in matches if m.distance <= thres_dist]
+
+    points=np.zeros(shape=(len(sel_matches),4))
+    points_shift = np.zeros(shape=(len(sel_matches),2))
+    points_shift_abs = np.zeros(shape=(len(sel_matches),1))
+
+    #Output variable where where for every matching point it is written hamming distance, shift and slope
+    compar_stack = np.array([100,1.5,0.0,1,1,2,2])
+
+    #visualization(img1,img2,sel_matches)
+    i = 0
+    for m in sel_matches:
+        points[i][:]= [int(k1[m.queryIdx].pt[0]),int(k1[m.queryIdx].pt[1]),int(k2[m.trainIdx].pt[0]),int(k2[m.trainIdx].pt[1])]
+        points_shift[i][:] = [int(k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]),int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1])]
+        points_shift_abs [i][:] = [np.sqrt((int(cols + k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]))**2+
+                                           (int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1]))**2)]
+        
+        deltax = np.float(int(k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]))
+        deltay = np.float(int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1]))
+        
+        if deltax == 0 and deltay != 0:
+            slope = 90
+        elif deltax == 0 and deltay == 0:
+            slope = 0
+        else:
+            slope = (np.arctan(deltay/deltax)*360)/(2*np.pi)
+        
+        compar_stack = np.vstack([compar_stack,[m.distance,points_shift_abs [i][:],slope,
+                                                int(k1[m.queryIdx].pt[0]),
+                                                int(k1[m.queryIdx].pt[1]),
+                                                int(k2[m.trainIdx].pt[0]),
+                                                int(k2[m.trainIdx].pt[1])]])
+        i=i+1
+
+        
+        
+    #Ordino lo stack
+    compar_stack = compar_stack[compar_stack[:,0].argsort()]#Returns the indices that would sort an array.
+    print len(compar_stack)
+
+    best = select_best_matching(compar_stack[0:90])#The number of sorted points to be passed
+    '''   
+    report = os.path.join(os.path.dirname(image1),'report.txt')
+    out_file = open(report,"a")
+    out_file.write("\n")
+    out_file.write("Il migliore ha un reliability value pari a "+str(best[0])+" \n")
+    out_file.close()
+    '''
+    best_match = [best[3:7]]
+    return best_match
+
+
+def select_best_matching(compstack):
+
+    '''Determine the best matching points among the extracted ones
+
+    :param compstack: array with points and distances extracted by the gcp_extraction function
+    :returs: index of the row with the best matching points
+    
+    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
+    Last modified: 23/05/2014
+    '''
+    
+    # Sort
+    compstack = compstack[compstack[:,2].argsort()]
+    spl_slope = np.append(np.where(np.diff(compstack[:,2])>0.1)[0]+1,len(compstack[:,0]))
+    
+    step = 0
+    best_variability = 5
+    len_bestvariab = 0
+    best_row = np.array([100,1.5,0.0,1,1,2,2])
+
+    for i in spl_slope:
+        slope = compstack[step:i][:,2]
+        temp = compstack[step:i][:,1]
+        variab_temp = np.var(temp)
+        count_list=[]
+        if variab_temp <= best_variability and len(temp) >3:
+            count_list.append(len(temp))
+
+            if variab_temp < best_variability:
+                
+                best_variability = variab_temp
+                len_bestvariab = len(temp)                
+                best_row = compstack[step:i][compstack[step:i][:,0].argsort()][0]
+                all_rows = compstack[step:i]
+            if variab_temp == best_variability:
+                if len(temp)>len_bestvariab:
+                    best_variability = variab_temp
+                    len_bestvariab = len(temp)                
+                    best_row = compstack[step:i][compstack[step:i][:,0].argsort()][0]
+                    all_rows = compstack[step:i]
+        step = i
+    return best_row #,,point_list1,point_list2
+
+
+def affine_correction(input_band,best_match):
+    
+    '''Perform the correction using warpAffine from OpenCV
+
+    :param input_band: 2darray containing a single band of the original image (numpy array)
+    :param best_match: array returned by the gcp_extraction function with the best matching points to be used for correction  
+    :returs: 2darray with the corrected band
+    
+    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
+    Last modified: 23/05/2014
+    '''
+    
+    rows,cols = input_band.shape  
+    delta_x = best_match[0][2] - best_match[0][0]
+    delta_y = best_match[0][3] - best_match[0][1]
+    M = np.float32([[1,0,delta_x],[0,1,delta_y]])
+    dst = cv2.warpAffine(input_band,M,(cols,rows))
+    return dst
+
+
+def F_B(path,floating,ref):
+    
+    '''Get corner cordinate from a raster
+
+    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
+    :returs: minx,miny,maxx,maxy: points taken from geomatrix (string)
+    
+    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
+    Last modified: 23/05/2014
+    '''
+    
+    dir1 = os.listdir(floating)
+    dir2 = os.listdir(ref)
+    a_list=[]
+    for i in [1]:#range(1,6):#(1,6):
+        floating_list = [s for s in dir1 if "_B"+str(i)+'_city' in s ]
+        if len(floating_list):
+            ref_list = [s for s in dir2 if "_B"+str(i)+'_city' in s ]
+            rows,cols_q,nbands,geotransform,projection = read_image_parameters(floating+floating_list[0])
+            rows,cols_q,nbands,geotransform,projection = read_image_parameters(ref+ref_list[0])
+            band_list0 = read_image(floating+floating_list[0],np.uint8,0)
+            band_list1 = read_image(ref+ref_list[0],np.uint8,0)
+            im0=band_list0[0]
+            im1=band_list1[0]       
+            a=gcp_extraction(floating+floating_list[0],ref+ref_list[0])# the coordinates of the max point which is supposed to be the invariant point
+            a_list.append(a[0][0] - a[0][2])
+            a_list.append(a[0][1] - a[0][3])
+            b=affine_correction(im0,a)
+            out_list=[]
+            out_list.append(b)
+            write_image(out_list,0,i,floating+floating_list[0][:-4]+'_adj.tif',rows,cols_q,geotransform,projection)       
+    return a_list

@@ -40,7 +40,10 @@ License: This file is part of SensumTools.
 '''
 
 import os
-import sys
+import sys,os
+sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
+sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
+os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 import osgeo.gdal, gdal
 from gdalconst import *
 import numpy as np

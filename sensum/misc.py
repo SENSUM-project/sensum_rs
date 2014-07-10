@@ -38,8 +38,8 @@ import osgeo.ogr
 import numpy as np
 from scipy import ndimage
 import shutil
-import multiprocessing
-from multiprocessing import Pool
+import multi
+from multi import Pool
 import ephem
 import math
 from collections import Counter

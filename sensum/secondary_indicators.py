@@ -42,6 +42,7 @@ License: This file is part of SensumTools.
 import os
 import sys
 import osgeo.gdal, gdal
+import osgeo.ogr
 from gdalconst import *
 import numpy as np
 import otbApplication
@@ -426,21 +427,22 @@ class CircleDensity(object):
     '''
 
     def __init__(self,centroid,radius):
-    '''
-    :param centroid: centroid point (ogr.wkbPoint)
-    :param radius: radius of circle expressed in coordinates as unit of measure (float)
-    '''
+        '''
+        :param centroid: centroid point (ogr.wkbPoint)
+        :param radius: radius of circle expressed in coordinates as unit of measure (float)
+        '''
         self.centroid = centroid
         self.radius = radius
         
     def add(self):
-    '''
-    :returns: geometry of polygon (ogr.Geometry)
-    '''
+        '''
+        :returns: geometry of polygon (ogr.Geometry)
+        '''
         circle = self.centroid.Buffer(self.radius,40)
         return circle
 
-def density(buildingShape,radius,outputShape=''):
+
+def density(buildingShape,radius,outputShape):
     '''Function for assign density value into each building.                                                             \
     Build new dataset (or shapefile if outputShape argument declared) with field N_Building and Density which contains   \
     respectively the number of building into the expressed radius and density parameter expressed in number of building  \
@@ -452,20 +454,20 @@ def density(buildingShape,radius,outputShape=''):
     :returns: Dataset of new features assigned (ogr.Dataset)
     '''
     #get layers
-    driver = ogr.GetDriverByName("ESRI Shapefile")
+    driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
     buildingsDS = driver.Open(buildingShape)
     buildingsLayer = buildingsDS.GetLayer()
     buindingsFeaturesCount = buildingsLayer.GetFeatureCount()
     if outputShape == '':
-        driver = ogr.GetDriverByName("Memory")
+        driver = osgeo.ogr.GetDriverByName("Memory")
     outDS = driver.CreateDataSource(outputShape)
     #copy the buildings layer and use it as output layer
     outDS.CopyLayer(buildingsLayer,"")
     outLayer = outDS.GetLayer()
     #add fields 'Density' to outLayer
-    fldDef = ogr.FieldDefn('N_Building', ogr.OFTInteger)
+    fldDef = osgeo.ogr.FieldDefn('N_Building', osgeo.ogr.OFTInteger)
     outLayer.CreateField(fldDef)
-    fldDef = ogr.FieldDefn('Density', ogr.OFTReal)
+    fldDef = osgeo.ogr.FieldDefn('Density', osgeo.ogr.OFTReal)
     outLayer.CreateField(fldDef)
     #loop into building features goint to make a window around each features and taking how many buildings are there around
     for i in range(buindingsFeaturesCount):
@@ -478,11 +480,18 @@ def density(buildingShape,radius,outputShape=''):
         area = radius**2 * math.pi
         spatialDS = maker.get_shapeDS(buildingsLayer)
         spatialLayer = spatialDS.GetLayer()
+        spatialFeature = spatialLayer.GetNextFeature()
+        sum_area = 0.0
+        while spatialFeature:
+            area_ft = spatialFeature.GetField("Area")
+            sum_area = area_ft + sum_area
+            spatialFeature = spatialLayer.GetNextFeature()
         spatialLayerFeatureCount = spatialLayer.GetFeatureCount() -1 #(-1) for remove itself
         outFeature = outLayer.GetFeature(i)
         outFeature.SetField("N_Building",spatialLayerFeatureCount)
         if spatialLayerFeatureCount:
-            outFeature.SetField("Density",float(spatialLayerFeatureCount/area))
+            #outFeature.SetField("Density",float(spatialLayerFeatureCount/area))
+            outFeature.SetField("Density",float(sum_area/area))
         else:
             outFeature.SetField("Density",0)
         outLayer.SetFeature(outFeature)
