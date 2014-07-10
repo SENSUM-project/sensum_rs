@@ -64,7 +64,8 @@ This procedure has been selected in order to facilitate the user.
 
 ##Fundamental
 sat_folder = 'F:\\Sensum_xp\\Van_process\\'   ##path of the folder containing satellite images
-input_shapefile = 'F:\\Sensum_xp\\Van_process\\Area_cut.shp' #path of the shapefile
+#input_shapefile = 'F:\\Sensum_xp\\Van_process\\Area_cut.shp' #path of the shapefile
+input_shapefile = 'F:\\Sensum_xp\\dilkushi water mask\\New_Mask_Inner_lake_rpj.shp'
 quantization_mode = 'kmeans' #'linear' or 'kmeans'
 #opt_polygon = 'F:\\Sensum_xp\\Cologne_process\\roi.shp'
 segmentation_name = 'Edison' #or 'Meanshift'
@@ -108,6 +109,7 @@ os.environ["ITK_AUTOLOAD_PATH"] = "C:\\OSGeo4W64\\apps\\orfeotoolbox\\applicatio
 #print sys.path
 #print os.environ["PATH"]
 import time
+import subprocess
 from skimage.morphology import square, closing
 import osgeo.gdal
 import otbApplication
@@ -129,12 +131,12 @@ data_type = np.int32
 start_time=time.time()
 dirs = os.listdir(sat_folder) #list of folders inside the satellite folder
 
-
 if __name__ == '__main__':
 
     print 'List of files and folders: ' + str(dirs)
 
     band_list = []
+    cd_names = []
     built_up_area_pca_list = []
     built_up_area_list = []
     dissimilarity_list = []
@@ -158,7 +160,8 @@ if __name__ == '__main__':
             print ref_list[j]
             #clip_rectangular(input_raster,data_type,input_shape,output_raster)
             clip_rectangular(ref_dir+ref_list[j],data_type,input_shapefile,ref_dir+ref_list[j][:-4]+'_city.TIF')
-        
+            #print 'C:\\OSGeo4W64\\bin\\gdalwarp.exe -q -cutline "'+ input_shapefile +'" -crop_to_cutline -of GTiff "'+ref_dir+ref_list[j]+'" "'+ref_dir+ref_list[j][:-4]+'_city.TIF"'
+            #os.system('C:/OSGeo4W64/bin/gdalwarp.exe -q -cutline "'+ input_shapefile +'" -crop_to_cutline -of GTiff '+ref_dir+ref_list[j]+' '+ref_dir+ref_list[j][:-4]+'_city.TIF')
         ref_files = os.listdir(ref_dir)
         ref_list = [s for s in ref_files if "_city.TIF" in s and "aux.xml" not in s]
     else: 
@@ -168,10 +171,13 @@ if __name__ == '__main__':
     for n in range(0,len(ref_list)):
         band_ref = read_image(ref_dir+ref_list[n],data_type,0)
         band_list.append(band_ref[0])
+       
     rows_ref,cols_ref,nbands_ref,geo_transform_ref,projection_ref = read_image_parameters(ref_dir+ref_list[0])
+    
     print len(band_list)
     if len(band_list) < 10:
-        band_list = normalize_to_L8(band_list)
+        print 'not re-adjusted to match L8'
+        #band_list = normalize_to_L8(band_list)
     elif len(band_list) > 10:
         #band_list[0],band_list[1],band_list[2],band_list[3],band_list[4],band_list[5],band_list[6],band_list[7],band_list[8]= band_list[3],band_list[4],band_list[5],band_list[6],band_list[7],band_list[0],band_list[1],band_list[8],band_list[9]
         #band_list[0],band_list[1],band_list[2],band_list[3],band_list[4],band_list[5]= band_list[1],band_list[2],band_list[3],band_list[4],band_list[5],band_list[9]
@@ -182,7 +188,8 @@ if __name__ == '__main__':
     #indexes need bands 1,2,3,4,5,7
     if change_detection_method == True:
         change_detection_list = band_calculation(band_list, ['Index12','Index11','Index10','Index9','Index8','Index7','Index6','Index5','Index4','Index3','Index2','Index1'])
-
+        shp2rast(input_shapefile,input_shapefile[:-4]+'.tif',rows_ref,cols_ref,'Conv',0,0,x_min=0,x_max=0,y_min=0,y_max=0)
+        
     if builtup_index_method == True or supervised_method == True or unsupervised_method == True:
         features_list = band_calculation(band_list,['SAVI','NDVI','NDBI','MNDWI','BUILT_UP']) #extract indexes
         #features_list[3] = features_list[3]*1000
@@ -191,8 +198,9 @@ if __name__ == '__main__':
 
     if builtup_index_method == True or change_detection_method == True:
         mask_vegetation = np.greater(features_list[2],features_list[0]) #exclude vegetation
-        mask_water = np.less(features_list[3],features_list[2]) #exclude water
-        write_image([mask_water],np.uint8,0,ref_dir+'mask_water.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref)
+        #mask_water = np.less(features_list[3],features_list[2]) #exclude water
+        #write_image([mask_water],np.uint8,0,ref_dir+'mask_water.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref)
+        mask_water = read_image(input_shapefile[:-4]+'.tif',np.uint8,0)
         mask_soil = np.greater(features_list[3]/1000,0) #exclude soil
         if builtup_index_method == True:
             built_up_area = np.choose(np.logical_and(mask_soil,np.logical_and(mask_water,mask_vegetation)),(features_list[4]/1000,0))
@@ -200,10 +208,12 @@ if __name__ == '__main__':
         if change_detection_method == True:
             cd_list_masked = []
             for mw in range(0,len(change_detection_list)):
-                cd_list_masked.append(np.choose(mask_water,(0,change_detection_list[mw])))
-            write_image(change_detection_list,np.float32,0,ref_dir+'change_detection.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref) #write built-up index to file
-            unsupervised_classification_otb(ref_dir+'change_detection.TIF',ref_dir+'change_detection_classification.TIF',5,1000000)
-
+                cd_list_masked.append(np.choose(mask_water[0],(0,change_detection_list[mw])))
+            write_image(cd_list_masked,np.float32,0,ref_dir+'change_detection.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref) #write built-up index to file
+            cd_names.append(ref_dir+'change_detection.TIF')
+            unsupervised_classification_otb(ref_dir+'change_detection.TIF',ref_dir+'change_detection_classification.TIF',5,1000)
+            
+            
     if pca_index_method == True or pca_classification_method == True:
         input_pca_list = (band_list[0],band_list[1],band_list[2],band_list[3],band_list[4])
         pca_mean,pca_mode,pca_second_order,pca_third_order = pca(input_pca_list)
@@ -329,7 +339,7 @@ if __name__ == '__main__':
                     print target_list[j]
                     #clip_rectangular(input_raster,data_type,input_shape,output_raster)
                     clip_rectangular(target_dir+target_list[j],data_type,input_shapefile,target_dir+target_list[j][:-4]+'_city.TIF')
-                
+                    #os.system('C:/OSGeo4W64/bin/gdalwarp.exe -q -cutline "'+ input_shapefile +'" -crop_to_cutline -of GTiff "'+target_dir+target_list[j]+'" "'+target_dir+target_list[j][:-4]+'_city.TIF"')
                 target_files = os.listdir(target_dir)
                 target_list = [s for s in target_files if "_city.TIF" in s and "aux.xml" not in s]
             else:
@@ -342,9 +352,10 @@ if __name__ == '__main__':
             for n in range(0,len(target_list)):
                 band_target = read_image(target_dir+target_list[n],data_type,0)
                 band_list.append(band_target[0])
-            print len(band_list)
+                
             if len(band_list) < 10:
-                band_list = normalize_to_L8(band_list)
+                print 'not re-adjusted to match L8'
+                #band_list = normalize_to_L8(band_list)
             elif len(band_list) > 10:
                 #table of correspondence between landsat 5/7 and 8
                 '''
@@ -381,8 +392,9 @@ if __name__ == '__main__':
             
             if builtup_index_method == True or change_detection_method == True:
                 mask_vegetation = np.greater(features_list[2],features_list[0]) #exclude vegetation
-                mask_water = np.less(features_list[3],features_list[2]) #exclude water
-                write_image([mask_water],np.uint8,0,target_dir+'mask_water.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref)
+                #mask_water = np.less(features_list[3],features_list[2]) #exclude water
+                #write_image([mask_water],np.uint8,0,target_dir+'mask_water.TIF',rows_ref,cols_ref,geo_transform_ref,projection_ref)
+                mask_water = read_image(input_shapefile[:-4]+'.tif',np.uint8,0)
                 mask_soil = np.greater(features_list[3]/1000,0) #exclude soil
                 if builtup_index_method == True:
                     built_up_area = np.choose(np.logical_and(mask_soil,np.logical_and(mask_water,mask_vegetation)),(features_list[4]/1000,0))
@@ -390,8 +402,9 @@ if __name__ == '__main__':
                 if change_detection_method == True:
                     cd_list_masked = []
                     for mw in range(0,len(change_detection_list)):
-                        cd_list_masked.append(np.choose(mask_water,(0,change_detection_list[mw])))
-                    write_image(change_detection_list,np.float32,0,target_dir+'change_detection.TIF',rows_target,cols_target,geo_transform_target,projection_target) #write built-up index to file
+                        cd_list_masked.append(np.choose(mask_water[0],(0,change_detection_list[mw])))
+                    write_image(cd_list_masked,np.float32,0,target_dir+'change_detection.TIF',rows_target,cols_target,geo_transform_target,projection_target) #write built-up index to file
+                    cd_names.append(target_dir+'change_detection.TIF')
                     unsupervised_classification_otb(target_dir+'change_detection.TIF',target_dir+'change_detection_classification.TIF',5,10)
             
             if pca_index_method == True or pca_classification_method == True:
@@ -510,10 +523,20 @@ if __name__ == '__main__':
                 del output_list
                 del output_ft_1
                 del multiproc
-                
     
-    if builtup_index_method == True:
-        write_image(built_up_area_list,np.float32,0,sat_folder+'evolution_built_up_index.TIF',rows,cols,geo_transform,projection)
+    if change_detection_method == True:  
+        big_list = []
+        output_cd = sat_folder + 'change_detection_all.TIF'
+        for k in range(0,len(cd_names)):
+            b_list = read_image(cd_names[k],np.float32,0)
+            rows,cols,nbands,geo_transform,projection = read_image_parameters(cd_names[k])
+            for b in range(0,len(b_list)):
+                big_list.append(b_list[b])
+        write_image(big_list,np.float32,0,output_cd,rows,cols,geo_transform,projection)    
+        unsupervised_classification_otb(output_cd,output_cd[:-4]+'_class.TIF',5,1000)
+    
+    #if builtup_index_method == True:
+        #write_image(built_up_area_list,np.float32,0,sat_folder+'evolution_built_up_index.TIF',rows,cols,geo_transform,projection)
     if pca_index_method == True:
         write_image(built_up_area_pca_list,np.float32,0,sat_folder+'evolution_pca_index.TIF',rows,cols,geo_transform,projection)
     #if dissimilarity_method == True:
