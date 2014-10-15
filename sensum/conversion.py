@@ -40,18 +40,16 @@ License: This file is part of SensumTools.
 ---------------------------------------------------------------------------------
 '''
 
+import config
 import os
 import sys
-sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
 import osgeo.osr
 import osgeo.ogr
 import osgeo.gdal
+import math
 from gdalconst import *
 import numpy as np
 import otbApplication
-#from sensum.secondary_indicators import *
 if os.name == 'posix':
     separator = '/'
 else:
@@ -310,7 +308,6 @@ def shp2rast(input_shape,output_raster,rows,cols,field_name,pixel_width=0,pixel_
         
     return x_min,x_max,y_min,y_max
 
-
 def polygon2array(input_layer,pixel_width,pixel_height): 
     
     '''Conversion from polygon to array
@@ -328,9 +325,11 @@ def polygon2array(input_layer,pixel_width,pixel_height):
     '''
     
     x_min, x_max, y_min, y_max = input_layer.GetExtent()
-    
-    x_res = int((x_max - x_min) / pixel_width) #pixel x-axis resolution
-    y_res = int((y_max - y_min) / pixel_height) #pixel y-axis resolution
+    #print x_min, x_max, y_min, y_max
+    #print pixel_width
+    #print pixel_height
+    x_res = int(math.ceil((x_max - x_min) / pixel_width)) #pixel x-axis resolution
+    y_res = int(math.ceil((y_max - y_min) / pixel_height)) #pixel y-axis resolution
     target_ds = osgeo.gdal.GetDriverByName('MEM').Create('', x_res, y_res, GDT_Byte) #create layer in memory
     geo_transform = [x_min, pixel_width, 0, y_max, 0, -pixel_height] #geomatrix definition
     target_ds.SetGeoTransform(geo_transform)
@@ -404,7 +403,10 @@ def world2pixel(geo_transform, long, lat):
 
     pixel_x = int((long - ulX) / xDist)
     pixel_y = int((ulY - lat) / abs(yDist))
-    return (pixel_x, pixel_y)
+    if pixel_x < 0 or pixel_y < 0:
+        ValueError(int)
+    else:
+        return (pixel_x, pixel_y)
 
 
 def pixel2world(geo_transform, cols, rows):
@@ -844,7 +846,6 @@ class WindowsMaker(object):
         outLayer = outDS.CreateLayer('polygon', geom_type=osgeo.ogr.wkbPolygon)
         outLayer.CreateFeature(outFeature)
 
-
 def normalize_to_L8(input_band_list):
     
     '''Normalize the range of values of Landsat 5 and 7 to match Landsat 8
@@ -866,3 +867,6 @@ def normalize_to_L8(input_band_list):
         out_list.append(matrix)  
     
     return out_list 
+    
+if __name__ == "__main__":
+    reproject_shapefile("C:/Van_process/New_Mask_Inner_lake.shp","C:/Van_process/mask.shp",32638)

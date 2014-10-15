@@ -40,20 +40,17 @@ License: This file is part of SensumTools.
 ---------------------------------------------------------------------------------
 '''
 
-
+import config
 import os
 import sys
-sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
-print os.environ["PATH"]
 import osgeo.gdal
 from gdalconst import *
 import cv2
 import numpy as np
 import osgeo.ogr
 import otbApplication
-from sensum.conversion import *
+import shutil
+from conversion import *
 
 if os.name == 'posix': 
     separator = '/'
@@ -61,7 +58,7 @@ else:
     separator = '\\'
 
 
-def clip_rectangular(input_raster,data_type,input_shape,output_raster):
+def clip_rectangular(input_raster,data_type,input_shape,output_raster,mask=False):
     
     '''Clip a raster with a rectangular shape based on the provided polygon
     
@@ -69,6 +66,7 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     :param data_type: numpy type used to read the image (e.g. np.uint8, np.int32; 0 for default: np.uint16) (numpy type)
     :param input_shape: path and name of the input shapefile (*.shp) (string)
     :param output_raster: path and name of the output raster file (*.TIF,*.tiff) (string)
+    :param mask: bool to enable the usage of the shapefile as a mask (boolean)
     :returns:  an output file is created
     :raises: AttributeError, KeyError
     
@@ -80,9 +78,12 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     #TODO: would use only one argument to define input image and one to define input shp.
         
     #os.system('gdalwarp -q -cutline ' + shapefile + ' -crop_to_cutline -of GTiff ' + path + name +' '+ path + name[:-4] + '_city.TIF')
-
+    #print input_raster
+    if data_type == 0: data_type = np.uint16
     x_list = []
     y_list = []
+    x_list_coordinates = []
+    y_list_coordinates = []
     # get the shapefile driver
     driver = osgeo.ogr.GetDriverByName('ESRI Shapefile')
     # open the data source
@@ -103,45 +104,83 @@ def clip_rectangular(input_raster,data_type,input_shape,output_raster):
     cols = inb.RasterXSize
     rows = inb.RasterYSize
     nbands = inb.RasterCount  
+        
     # loop through the features in the layer
     feature = layer.GetNextFeature()
     while feature:
-        # get the x,y coordinates for the point
-        geom = feature.GetGeometryRef()
-        ring = geom.GetGeometryRef(0)
-        n_vertex = ring.GetPointCount()
-        for i in range(0,n_vertex-1):
-            lon,lat,z = ring.GetPoint(i)
-            x_matrix,y_matrix = world2pixel(geoMatrix,lon,lat)
-            x_list.append(x_matrix)
-            y_list.append(y_matrix)
-        # destroy the feature and get a new one
-        feature.Destroy()
-        feature = layer.GetNextFeature()
+        try:
+            # get the x,y coordinates for the point
+            geom = feature.GetGeometryRef()
+            ring = geom.GetGeometryRef(0)
+            n_vertex = ring.GetPointCount()
+            for i in range(0,n_vertex-1):
+                lon,lat,z = ring.GetPoint(i)
+                #x_matrix,y_matrix = world2pixel(geoMatrix,lon,lat)
+                #x_list.append(x_matrix)
+                #y_list.append(y_matrix)
+                x_list_coordinates.append(lon)
+                y_list_coordinates.append(lat)
+            # destroy the feature and get a new one
+            feature.Destroy()
+            feature = layer.GetNextFeature()
+        except:
+            feature = None
     #regularize the shape
-    x_list.sort()
-    x_min = x_list[0]
-    y_list.sort()
-    y_min = y_list[0]
-    x_list.sort(None, None, True)
-    x_max = x_list[0]
-    y_list.sort(None, None, True)
-    y_max = y_list[0]
     
+    x_list_coordinates.sort()
+    x_min = x_list_coordinates[0]
+    y_list_coordinates.sort()
+    y_min = y_list_coordinates[0]
+    x_list_coordinates.sort(None, None, True)
+    x_max = x_list_coordinates[0]
+    y_list_coordinates.sort(None, None, True)
+    y_max = y_list_coordinates[0]
+    
+
+    #print x_min, geoMatrix[0]
+    #print x_max, geoMatrix[0]+cols*geoMatrix[1]
+    '''
+    x_min = max(x_min,geoMatrix[0])
+    y_min = min(y_min,geoMatrix[3]-rows*geoMatrix[1])
+    x_max = min(x_max,geoMatrix[0]+cols*geoMatrix[1])
+    y_max = max(y_max,geoMatrix[3])
+    '''
+
+    if x_min < geoMatrix[0]: x_min = geoMatrix[0]
+    if y_min < geoMatrix[3]-rows*geoMatrix[1]: y_min = geoMatrix[3]-rows*geoMatrix[1]
+    if x_max > geoMatrix[0]+cols*geoMatrix[1]: x_max = geoMatrix[0]+cols*geoMatrix[1]
+    if y_max > geoMatrix[3]: y_max = geoMatrix[3]
+
+    lon_min = x_min
+    lat_min = y_max
+
+
+    x_min, y_max = world2pixel(geoMatrix, x_min, y_max)
+    x_max, y_min = world2pixel(geoMatrix, x_max, y_min)
+
     #compute the new starting coordinates
-    lon_min = float(x_min*geoMatrix[1]+geoMatrix[0]) 
-    lat_min = float(geoMatrix[3]+y_min*geoMatrix[5])
+    #lon_min = float(x_min*geoMatrix[1]+geoMatrix[0]) 
+    #lat_min = float(geoMatrix[3]+y_min*geoMatrix[5])
 
     geotransform = [lon_min,geoMatrix[1],0.0,lat_min,0.0,geoMatrix[5]]
+    print x_max,x_min
+    print y_max,y_min
     cols_out = x_max-x_min
-    rows_out = y_max-y_min
+    rows_out = y_min-y_max
     
     gdal_data_type = data_type2gdal_data_type(data_type)
+    if mask == True:
+        rows_ref,cols_ref,nbands_ref,geo_transform_ref,projection_ref = read_image_parameters(input_raster)
+        shp2rast(input_shape,input_shape[:-4]+'.tif',rows_out,cols_out,'Mask',pixel_width=geo_transform_ref[1],pixel_height=abs(geo_transform_ref[5]),x_min=0,x_max=0,y_min=0,y_max=0) 
+        mask_list = read_image(input_shape[:-4]+'.tif',np.uint8,0)
+        msk = np.equal(mask_list[0],1)
     output=driver.Create(output_raster,cols_out,rows_out,nbands,gdal_data_type) #to check
     
     for b in range (1,nbands+1):
         inband = inb.GetRasterBand(b)
-        data = inband.ReadAsArray(x_min,y_min,cols_out,rows_out).astype(data_type)
+        data = inband.ReadAsArray(x_min,y_max,cols_out,rows_out).astype(data_type)
+        if mask == True:
+            data = np.choose(msk,(0,data))
         outband=output.GetRasterBand(b)
         outband.WriteArray(data,0,0) #write to output image
     
@@ -200,7 +239,7 @@ def layer_split(input_raster,band_selection,data_type):
         write_image(band_list,data_type,band_selection,input_raster[:-4]+'_B'+str(band_selection)+'.TIF',rows,cols,geo_transform,projection)  
     
 
-def gcp_extraction_old(input_band_ref,input_band,ref_geo_transform,output_option):
+def gcp_extraction(input_band_ref,input_band,ref_geo_transform,output_option):
     
     '''GCP extraction and filtering using the SURF algorithm
     
@@ -325,14 +364,14 @@ def pansharp(input_raster_multiband,input_raster_panchromatic,output_raster):
     RigidTransformResample.SetParameterString("transform.type","id") 
     RigidTransformResample.SetParameterFloat("transform.type.id.scalex", scale_cols) 
     RigidTransformResample.SetParameterFloat("transform.type.id.scaley", scale_rows) 
-    #RigidTransformResample.SetParameterInt("ram", 2000)
+    RigidTransformResample.SetParameterInt("ram", 2000)
     RigidTransformResample.ExecuteAndWriteOutput()
  
     Pansharpening = otbApplication.Registry.CreateApplication("Pansharpening") 
     # Application parameters
     Pansharpening.SetParameterString("inp", input_raster_panchromatic) 
     Pansharpening.SetParameterString("inxs", input_raster_multiband[:-4]+'_resampled.tif') 
-    #Pansharpening.SetParameterInt("ram", 2000) 
+    Pansharpening.SetParameterInt("ram", 2000) 
     Pansharpening.SetParameterString("out", output_raster) 
     Pansharpening.SetParameterOutputImagePixelType("out", 3) 
      
@@ -387,33 +426,8 @@ def fix_tiling_raster(input_raster1,input_raster2):
     '''
     minx1,miny1,maxx1,maxy1 = get_coordinate_limit(input_raster1)
     minx2,miny2,maxx2,maxy2 = get_coordinate_limit(input_raster2)
-
-    #Get cordinate of intersation from 2 raster
-
-    if minx1-minx2 >= 0:
-        new_minx = minx1
-    else:
-        new_minx = minx2
-    if miny1-miny2 >= 0:
-        new_miny = miny1
-    else:
-        new_miny = miny2
-    if maxx1-maxx2 <= 0:
-        new_maxx = maxx1
-    else:
-        new_maxx = maxx2
-    if maxy1-maxy2 <= 0:
-        new_maxy = maxy1
-    else:
-        new_maxy = maxy2
-
-    #Rewrite a raster with new cordinate
-    #TODO   FIX CASE WITHOUT os.getcwd() WHEN FULL PATH IS DECLARED
-    os.system("gdal_translate -of GTiff -projwin "+str(minx)+" "+str(maxy)+" "+str(maxx)+" "+str(miny)+" "+os.getcwd()+'/'+input_raster+" "+os.getcwd()+'/'+input_raster+"_tmp.tif")
-    if os.name == 'posix': 
-        os.system("mv "+os.getcwd()+'/'+input_raster+"_tmp.tif "+os.getcwd()+'/'+input_raster)
-    else:
-        os.system("rename "+os.getcwd()+'/'+input_raster+"_tmp.tif "+os.getcwd()+'/'+input_raster)
+    os.system("gdal_translate -of GTiff -projwin "+str(minx1)+" "+str(maxy1)+" "+str(maxx1)+" "+str(miny1)+" "+input_raster2+" "+input_raster2+"_tmp.tif")
+    shutil.move(input_raster2+"_tmp.tif",input_raster2)
 
 
 def get_coordinate_limit(input_raster):
@@ -443,38 +457,50 @@ def get_coordinate_limit(input_raster):
     return minx,miny,maxx,maxy
 
 
-def gcp_extraction(image_ref,image_target):
+def Extraction(image1,image2):
     
-    '''GCP extraction and filtering using the SURF algorithm
-    
-    :param image_ref: path and name of the input reference file (*.TIF,*.tiff) (string)
-    :param image_target: path and name of the input target file (*.TIF,*.tiff) (string)
-    :returns:  array with best matching points is returned
-    :raises: AttributeError, KeyError
-    
-    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
-    Last modified: 23/05/2014
     '''
+    ###################################################################################################################
+    Feature Extraction using the SURF algorithm
+    
+    Input:
+     - image1: path to the reference image - each following image is going to be matched with this reference
+     - image2: path to the image to be corrected
+    
+    Output:
+    Returns a matrix with x,y coordinates of matching points and the minimum distance
+    ###################################################################################################################
+    '''
+    image_1 = osgeo.gdal.Open(image1,GA_ReadOnly)
+    inband1=image_1.GetRasterBand(1)
+    cols = image_1.RasterXSize
+    img1 = inband1.ReadAsArray().astype('uint8')
+
+    img1_m = np.ma.masked_values(img1, 0).astype('uint8')
 
     detector = cv2.FeatureDetector_create("SURF") 
     descriptor = cv2.DescriptorExtractor_create("BRIEF")
     matcher = cv2.DescriptorMatcher_create("BruteForce-Hamming")
+    #print img1.type
 
-    img_ref = read_image(image_ref,np.uint8,1)
-    rows_ref,cols_ref,nbands_ref,geotransform_ref,projection_ref = read_image_parameters(image_ref)
-    img_ref_m = np.ma.masked_values(img_ref[0], 0).astype('uint8')
+    kp1 = detector.detect(img1, mask=img1_m)
+    print img1_m
+    k1, d1 = descriptor.compute(img1, kp1)
 
-    kp1 = detector.detect(img_ref[0], mask=img_ref_m)
-    k1, d1 = descriptor.compute(img_ref[0], kp1)
-    img_ref = []
+    image_1 = None
+    img1 = None
     
-    img_target = read_image(image_target,np.uint8,0)
-    rows_target,cols_target,nbands_target,geotransform_target,projection_target = read_image_parameters(image_target)
-    img_target_m = np.ma.masked_values(img_target[0], 0).astype('uint8')
+    image_2 = osgeo.gdal.Open(image2,GA_ReadOnly)
+    inband2=image_2.GetRasterBand(1)
+    img2 = inband2.ReadAsArray().astype('uint8')
+
+    img2_m = np.ma.masked_values(img2, 0).astype('uint8')
     
     kp2 = detector.detect(img2, mask = img2_m)
     k2, d2 = descriptor.compute(img2, kp2)
-    img_target = []
+
+    image_2 = None
+    img2 = None
 
     # match the keypoints
     matches = matcher.match(d1, d2)
@@ -489,16 +515,20 @@ def gcp_extraction(image_ref,image_target):
     points_shift = np.zeros(shape=(len(sel_matches),2))
     points_shift_abs = np.zeros(shape=(len(sel_matches),1))
 
-    #Output variable where where for every matching point it is written hamming distance, shift and slope
+    # Creo una variabile dove vado a scrivere, per ogni coppia: distanza hamming, shift, pendenza
+   
     compar_stack = np.array([100,1.5,0.0,1,1,2,2])
 
-    #visualization(img1,img2,sel_matches)
+    #vishualization(img1,img2,sel_matches)
     i = 0
     for m in sel_matches:
         points[i][:]= [int(k1[m.queryIdx].pt[0]),int(k1[m.queryIdx].pt[1]),int(k2[m.trainIdx].pt[0]),int(k2[m.trainIdx].pt[1])]
         points_shift[i][:] = [int(k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]),int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1])]
         points_shift_abs [i][:] = [np.sqrt((int(cols + k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]))**2+
                                            (int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1]))**2)]
+        
+        #print m.distance,'   ' , [np.sqrt((int(k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]))**2+
+                                          # (int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1]))**2)]
         
         deltax = np.float(int(k2[m.trainIdx].pt[0])-int(k1[m.queryIdx].pt[0]))
         deltay = np.float(int(k2[m.trainIdx].pt[1])-int(k1[m.queryIdx].pt[1]))
@@ -521,31 +551,32 @@ def gcp_extraction(image_ref,image_target):
         
     #Ordino lo stack
     compar_stack = compar_stack[compar_stack[:,0].argsort()]#Returns the indices that would sort an array.
+    #print compar_stack#[0:30]
     print len(compar_stack)
 
-    best = select_best_matching(compar_stack[0:90])#The number of sorted points to be passed
-    '''   
+    best = best_row_2(compar_stack[0:90])#The number of sorted points to be passed
+    print 'BEST!!!!!', best
+        
     report = os.path.join(os.path.dirname(image1),'report.txt')
     out_file = open(report,"a")
     out_file.write("\n")
     out_file.write("Il migliore ha un reliability value pari a "+str(best[0])+" \n")
     out_file.close()
+    migliore = [best[3:7]]
+    #return migliore,best[0]
+    return migliore
+
+def best_row_2(compstack):
     '''
-    best_match = [best[3:7]]
-    return best_match
-
-
-def select_best_matching(compstack):
-
-    '''Determine the best matching points among the extracted ones
-
-    :param compstack: array with points and distances extracted by the gcp_extraction function
-    :returs: index of the row with the best matching points
+    ###################################################################################################################
     
-    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
-    Last modified: 23/05/2014
+    Input:
+     - compstack: ..........................
+    
+    Output:
+    ..............................
+    ###################################################################################################################
     '''
-    
     # Sort
     compstack = compstack[compstack[:,2].argsort()]
     spl_slope = np.append(np.where(np.diff(compstack[:,2])>0.1)[0]+1,len(compstack[:,0]))
@@ -576,58 +607,57 @@ def select_best_matching(compstack):
                     best_row = compstack[step:i][compstack[step:i][:,0].argsort()][0]
                     all_rows = compstack[step:i]
         step = i
-    return best_row #,,point_list1,point_list2
+    return best_row#,,point_list1,point_list2
 
 
-def affine_correction(input_band,best_match):
-    
-    '''Perform the correction using warpAffine from OpenCV
 
-    :param input_band: 2darray containing a single band of the original image (numpy array)
-    :param best_match: array returned by the gcp_extraction function with the best matching points to be used for correction  
-    :returs: 2darray with the corrected band
-    
-    Author: Mostapha Harb - Daniele De Vecchi - Daniel Aurelio Galeazzo
-    Last modified: 23/05/2014
+def affine_corrected(img,delta_x,delta_y):
     '''
+    ###################################################################################################################
     
-    rows,cols = input_band.shape  
-    delta_x = best_match[0][2] - best_match[0][0]
-    delta_y = best_match[0][3] - best_match[0][1]
+    Input:
+     - img,delta_x,delta_y: ..........................
+    
+    Output:
+    ..............................
+    ###################################################################################################################
+    '''
+    rows,cols = img.shape  
     M = np.float32([[1,0,delta_x],[0,1,delta_y]])
-    dst = cv2.warpAffine(input_band,M,(cols,rows))
+    dst = cv2.warpAffine(img,M,(cols,rows))
     return dst
 
 
 def F_B(path,floating,ref):
-    
-    '''Get corner cordinate from a raster
-
-    :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
-    :returs: minx,miny,maxx,maxy: points taken from geomatrix (string)
-    
-    Author: Daniel Aurelio Galeazzo - Daniele De Vecchi - Mostapha Harb
-    Last modified: 23/05/2014
     '''
+    ###################################################################################################################
     
+    Input:
+     - path,floating,ref: ..........................
+    
+    Output:
+    ..............................
+    ###################################################################################################################
+    '''
     dir1 = os.listdir(floating)
     dir2 = os.listdir(ref)
     a_list=[]
-    for i in [1]:#range(1,6):#(1,6):
-        floating_list = [s for s in dir1 if "_B"+str(i)+'_city' in s ]
-        if len(floating_list):
-            ref_list = [s for s in dir2 if "_B"+str(i)+'_city' in s ]
-            rows,cols_q,nbands,geotransform,projection = read_image_parameters(floating+floating_list[0])
-            rows,cols_q,nbands,geotransform,projection = read_image_parameters(ref+ref_list[0])
-            band_list0 = read_image(floating+floating_list[0],np.uint8,0)
-            band_list1 = read_image(ref+ref_list[0],np.uint8,0)
+    for i in ban:#range(1,6):#(1,6):
+        ref_list = [s for s in dir1 if "_B"+str(i)+'_city' in s ]
+        if len(ref_list):
+            floating_list = [s for s in dir2 if "_B"+str(i)+'_city' in s ]
+            rows,cols_q,nbands,geotransform,projection = read_image_parameters(floating+ref_list[0])
+            rows,cols_q,nbands,geotransform,projection = read_image_parameters(ref+floating_list[0])
+            band_list0 = read_image(floating+ref_list[0],np.uint8,0)
+            band_list1 = read_image(ref+floating_list[0],np.uint8,0)
             im0=band_list0[0]
             im1=band_list1[0]       
-            a=gcp_extraction(floating+floating_list[0],ref+ref_list[0])# the coordinates of the max point which is supposed to be the invariant point
+            a=Extraction(floating+ref_list[0],ref+floating_list[0])# the coordinates of the max point which is supposed to be the invariant point
             a_list.append(a[0][0] - a[0][2])
             a_list.append(a[0][1] - a[0][3])
-            b=affine_correction(im0,a)
+            b=affine_corrected(im0,a[0][2] - a[0][0],a[0][3] - a[0][1])
             out_list=[]
             out_list.append(b)
-            write_image(out_list,0,i,floating+floating_list[0][:-4]+'_adj.tif',rows,cols_q,geotransform,projection)       
+            write_image(out_list,0,i,path+'corrected_Transl._'+floating[-11:-1]+'_B'+str(i)+'.tif',rows,cols_q,geotransform,projection)       
     return a_list
+    

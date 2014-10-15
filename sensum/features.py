@@ -39,7 +39,7 @@ License: This file is part of SensumTools.
     along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
-
+import config
 import os
 import numpy as np
 import scipy.stats
@@ -47,15 +47,12 @@ import os,sys
 sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
 sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
 os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
-import osgeo.gdal
-import otbApplication
 from skimage.feature import greycomatrix
 from skimage.feature import greycoprops
-from sensum.conversion import *
-from sensum.classification import *
-import multi
+from conversion import *
+from classification import *
+import multiprocessing
 import time
-import math
 
 
 #os.chdir('F:\\Sensum_xp\\Izmir\\')
@@ -64,7 +61,7 @@ input_raster = 'building_extraction_sup\\pansharp.TIF'
 input_shape = 'building_extraction_sup\\segmentation_watershed_default_training.shp'
 input_raster_2 = 'wetransfer-749d73\\pansharp.TIF'
 input_shape_2 = 'wetransfer-749d73\\watershed_001_training.shp'
-input_raster_3 = 'F:\\Sensum_xp\\Izmir\\Landsat5\\1984\\LT51800331984164XXX04_B1_city_adj.TIF'
+input_raster_3 = '/home/gale/Izmir/11MAY06080935-M2AS-053497864010_01_P002.TIF'
 input_txt = 'building_extraction_sup\\svm.txt'
 data_type = np.float32
 output_raster_opencv = 'building_extraction_sup\\opencv_supervised.TIF'
@@ -175,13 +172,18 @@ def band_calculation(input_band_list,indexes_list):
                 index8 = (input_band_list[7] - input_band_list[1]) / (input_band_list[7] + input_band_list[1]+0.000001)
             output_list.append(index8) 
         if indexes_list[indx] == 'Index9': #
+            #index A = float(BAND5) / (float(BAND5)+float(BAND4))
             inda = input_band_list[4].astype(float) / (input_band_list[4].astype(float)+input_band_list[3].astype(float)+0.000001)
+            #index B = float(BAND4) / (float(BAND4)+float(BAND3))
             indb = input_band_list[3].astype(float) / (input_band_list[3].astype(float)+input_band_list[2].astype(float)+0.000001)
+            #index C = float(BAND2) / (float(BAND2)+float(BAND5))
             indc = input_band_list[1].astype(float) / (input_band_list[1].astype(float)+input_band_list[4].astype(float)+0.000001)
+            #index 9 = =(2.0*float(index A)-(float(index B)+float(index C)))/(2.0*float(index A)+(float(index B)+float(index C)))
             index9 = (2*inda.astype(float) - (indb.astype(float)+indc.astype(float))) / (2*inda.astype(float) + indb.astype(float)+indc.astype(float)+0.000001)
             output_list.append(index9) 
         if indexes_list[indx] == 'Index10': 
-            index10 = (input_band_list[4] - input_band_list[3]) / (10*np.sqrt(input_band_list[4] + input_band_list[5])+0.000001)
+            #index 10 = (float(BAND5)-float(BAND4))/(10*sqrt(float(BAND5)+float(BAND6)))
+            index10 = (input_band_list[4].astype(float) - input_band_list[3].astype(float)) / (10*np.sqrt(input_band_list[4].astype(float) + input_band_list[5].astype(float))+0.000001)
             output_list.append(index10)
         if indexes_list[indx] == 'Index11': 
             index11 = index1.astype(float) +0.5 / (np.absolute(index1.astype(float)+0.5)+0.000001) * np.sqrt(np.absolute(index1.astype(float)+0.5))
@@ -286,36 +288,38 @@ def spectral_segments(input_band,dn_value,input_band_segmentation,indexes_list,b
     weigh_br = 0.0
     
     mask = np.equal(input_band_segmentation,dn_value)
-    seg_pos = np.where(input_band_segmentation==dn_value)
-    mat_pos = np.zeros(len(seg_pos[0]))
-    if len(seg_pos[0]!=0):
-        for l in range(0,len(seg_pos[0])):
-            mat_pos[l] = input_band[seg_pos[0][l]][seg_pos[1][l]]
-        for indx in range(0,len(indexes_list)):
-            if indexes_list[indx] == 'mean' or indexes_list[indx] == 'ndvi_mean':
-                mean = mat_pos.mean()
-                output_list.append(mean)
-            if indexes_list[indx] == 'std' or indexes_list[indx] == 'ndvi_std':
-                std = mat_pos.std()
-                output_list.append(std)
-            if indexes_list[indx] == 'mode':
-                mode_ar = scipy.stats.mode(mat_pos)
-                mode = mode_ar[0][0]
-                output_list.append(mode)
-            if indexes_list[indx] == 'max_br':
-                maxbr = np.amax(mat_pos)
-                output_list.append(maxbr)
-            if indexes_list[indx] == 'min_br':
-                minbr = np.amin(mat_pos)
-                output_list.append(minbr)
-            if indexes_list[indx] == 'weigh_br':
-                npixels = np.sum(mask)
-                outmask_band_sum = np.choose(mask,(0,input_band)) 
-                values = np.sum(outmask_band_sum)
-                nbp = bands_number*npixels
-                div = 1.0/nbp
-                weigh_br = div*values
-                output_list.append(weigh_br)
+    data = np.extract(mask,input_band)
+    mat_pos = data.flatten()
+    #seg_pos = np.where(input_band_segmentation==dn_value)
+    #mat_pos = np.zeros(len(seg_pos[0]))
+    #if len(seg_pos[0]!=0):
+        #for l in range(0,len(seg_pos[0])):
+         #   mat_pos[l] = input_band[seg_pos[0][l]][seg_pos[1][l]]
+    for indx in range(0,len(indexes_list)):
+        if indexes_list[indx] == 'mean' or indexes_list[indx] == 'ndvi_mean':
+            mean = mat_pos.mean()
+            output_list.append(mean)
+        if indexes_list[indx] == 'std' or indexes_list[indx] == 'ndvi_std':
+            std = mat_pos.std()
+            output_list.append(std)
+        if indexes_list[indx] == 'mode':
+            mode_ar = scipy.stats.mode(mat_pos)
+            mode = mode_ar[0][0]
+            output_list.append(mode)
+        if indexes_list[indx] == 'max_br':
+            maxbr = np.amax(mat_pos)
+            output_list.append(maxbr)
+        if indexes_list[indx] == 'min_br':
+            minbr = np.amin(mat_pos)
+            output_list.append(minbr)
+        if indexes_list[indx] == 'weigh_br':
+            npixels = np.sum(mask)
+            outmask_band_sum = np.choose(mask,(0,input_band)) 
+            values = np.sum(outmask_band_sum)
+            nbp = bands_number*npixels
+            div = 1.0/nbp
+            weigh_br = div*values
+            output_list.append(weigh_br)
     
     mat_pos=None
     seg_pos=None
@@ -563,13 +567,14 @@ if __name__ == '__main__':
 '''
 
 
-def value_to_segments(input_raster,input_shape,output_shape):
+def value_to_segments(input_raster,input_shape,output_shape,operation = 'Mode'):
     
     '''Assign the most frequent value inside a segment to the segment itself
     
     :param input_raster: path and name of the input raster file (*.TIF,*.tiff) (string)
     :param input_shape: path and name of shapefile with the segmentation results (*.shp) (string)
     :param output_shape: path and name of the output shapefile (*.shp) (string)
+    :param operation: string with the function to apply to fill the segments (mean or mode) (string)
     :returns:  an output shapefile is created with a new attribute field related to the most frequent value inside the segment
     :raises: AttributeError, KeyError
     
@@ -595,7 +600,7 @@ def value_to_segments(input_raster,input_shape,output_shape):
     dn_def = osgeo.ogr.FieldDefn('DN', osgeo.ogr.OFTInteger)
     outlayer.CreateField(dn_def)
     for b in range(0,len(band_list_class)):
-        class_def = osgeo.ogr.FieldDefn('Mean'+str(b+1),osgeo.ogr.OFTInteger)
+        class_def = osgeo.ogr.FieldDefn(operation+str(b+1),osgeo.ogr.OFTReal)
         outlayer.CreateField(class_def)
     area_def = osgeo.ogr.FieldDefn('Area',osgeo.ogr.OFTReal)
     outlayer.CreateField(area_def)
@@ -620,11 +625,12 @@ def value_to_segments(input_raster,input_shape,output_shape):
         for b in range(0,len(band_list_class)):
             for l in range(0,len(seg_pos[0])):
                 mat_pos[l] = band_list_class[b][seg_pos[0][l]][seg_pos[1][l]]
-            
-            #mode_ar = scipy.stats.mode(mat_pos)
-            #mode = mode_ar[0][0]
-            mean = np.mean(mat_pos)
-            outfeature.SetField('Mean'+str(b+1),mean)
+            if operation == 'Mode':
+                mode_ar = scipy.stats.mode(mat_pos)
+                value = mode_ar[0][0]
+            else:
+                value = np.mean(mat_pos)
+            outfeature.SetField(operation+str(b+1),value)
             
         outfeature.SetField('DN',dn)
         outfeature.SetField('Area',area)
@@ -637,3 +643,39 @@ def value_to_segments(input_raster,input_shape,output_shape):
     outfile.Destroy()    
     
     shutil.copyfile(input_shape[:-4]+'.prj', output_shape[:-4]+'.prj') #projection definition
+    
+    
+def get_class(target_layer):
+    
+    urban_classes_tmp = []
+    dissimilarity1_sums = []
+    dissimilarity2_sums = []
+    dissimilarity3_sums = []
+    counters = []
+    for i in range(target_layer.GetFeatureCount()):
+        urban_class = target_layer.GetFeature(i).GetField("Class")
+        dissimilarity1 = target_layer.GetFeature(i).GetField("Mean1")
+        dissimilarity2 = target_layer.GetFeature(i).GetField("Mean2")
+        dissimilarity3 = target_layer.GetFeature(i).GetField("Mean3")
+        if urban_class not in urban_classes_tmp:
+            urban_classes_tmp.append(urban_class)
+            counters.append(1)
+            dissimilarity1_sums.append(dissimilarity1)
+            dissimilarity2_sums.append(dissimilarity2)
+            dissimilarity3_sums.append(dissimilarity3)
+        else:
+            index = (i for i,urban_class_tmp in enumerate(urban_classes_tmp) if urban_class_tmp == urban_class).next()
+            counters[index] = counters[index] + 1
+            dissimilarity1_sums[index] = dissimilarity1_sums[index] + dissimilarity1
+            dissimilarity2_sums[index] = dissimilarity2_sums[index] + dissimilarity2
+            dissimilarity3_sums[index] = dissimilarity3_sums[index] + dissimilarity3
+    for i,urban_class in enumerate(urban_classes_tmp):
+        dissimilarity1_sums[i] = dissimilarity1_sums[i]/counters[i]
+        dissimilarity2_sums[i] = dissimilarity2_sums[i]/counters[i]
+        dissimilarity3_sums[i] = dissimilarity3_sums[i]/counters[i]
+    index1 = (urban_classes_tmp[i] for i,disimmilarity1_sum in enumerate(dissimilarity1_sums) if disimmilarity1_sum == max(dissimilarity1_sums)).next()
+    index2 = (urban_classes_tmp[i] for i,disimmilarity2_sum in enumerate(dissimilarity2_sums) if disimmilarity2_sum == max(dissimilarity2_sums)).next()
+    index3 = (urban_classes_tmp[i] for i,disimmilarity3_sum in enumerate(dissimilarity3_sums) if disimmilarity3_sum == max(dissimilarity3_sums)).next()
+    index_list = [index1,index2,index3]
+    return max(set(index_list), key=index_list.count)
+

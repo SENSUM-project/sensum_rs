@@ -30,27 +30,28 @@ License: This program is free software; you can redistribute it and/or modify
          (at your option) any later version.
 ---------------------------------------------------------------------------------
 '''
-
+import config
 import os
 import sys
+import subprocess
 import osgeo.osr
 import osgeo.ogr
 import numpy as np
 from scipy import ndimage
 import shutil
-import multi
-from multi import Pool
+import multiprocessing
+from multiprocessing import Pool
 import ephem
 import math
 from collections import Counter
 from operator import itemgetter
-from sensum.conversion import *
+from conversion import *
+from PyQt4 import QtCore, QtGui
 
 if os.name == 'posix':
     separator = '/'
 else:
     separator = '\\'
-
 
 def call_multiprocess(process,parameters_list,first_segment,last_segment):
     

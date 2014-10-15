@@ -38,11 +38,10 @@ License: This file is part of SensumTools.
     along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
-
+import config
 import os
 import sys
 import osgeo.gdal, gdal
-import osgeo.ogr
 from gdalconst import *
 import numpy as np
 import otbApplication
@@ -56,10 +55,10 @@ import ephem
 import math
 from operator import itemgetter
 import operator
-from sensum.conversion import *
 from collections import defaultdict,Counter
-from sensum.conversion import *
 import osr
+import osgeo.ogr, ogr
+from conversion import *
 
 if os.name == 'posix':
     separator = '/'
@@ -90,12 +89,12 @@ def shadow_length(input_band,latitude,longitude,date):
     
     o = ephem.Observer()
     o.lat, o.long,o.date = latitude,longitude,date
-    print 'o.lat,o.long',o.lat,o.long
+    #print 'o.lat,o.long',o.lat,o.long
     sun = ephem.Sun(o) #not an error
     azimuth = sun.az
     angle= math.degrees(azimuth)         
     rot = ndimage.interpolation.rotate(input_band, angle)
-    print 'azimuth_angle',angle
+    #print 'azimuth_angle',angle
     c=np.apply_along_axis(sum,1, rot)
     return max(c)
 
@@ -204,11 +203,13 @@ def building_regularity(length_a,length_b):
         raise Exception("wrong irregularity index")
 
 class ShadowPosition:
+
     '''Class for determinate the position of shadow than building calculated with date of raster acquisition \
     and coordinates.
     '''
 
     def __init__(self, date, latitude=None, longitude=None, rasterpath=None):
+
         '''Get shadow position compared with a feature
 
         latitude/longitude or rasterpath are mandatories for azimuth calculation
@@ -222,8 +223,9 @@ class ShadowPosition:
         if rasterpath:
             self.set_raster(rasterpath)
 
+    #TODO implement more elegant pattern
     def main(self):
-        #TODO implement more elegant pattern
+
         '''Commander method
 
         :returns: operator functions (tuple of 2 function)
@@ -234,6 +236,7 @@ class ShadowPosition:
         return self.leftOrRight, self.upOrDown
 
     def get_azimuth(self):
+
         '''Calculate the azimuth with coordinates
         '''
         try:
@@ -252,8 +255,9 @@ class ShadowPosition:
         except TypeError:
             print "TypeError: Need to set longitude and latitude through __init__(), set_coordinates() or set set_raster()"
 
+    #TODO implement same thing with shapefiles
     def set_raster(self,rasterpath):
-        #TODO implement same thing with shapefiles
+
         '''Get coordinate from a raster
 
         :param rasterpath: path of raster (str)
@@ -269,6 +273,7 @@ class ShadowPosition:
         self.latitude,self.longitude = a[0],a[1]
 
     def azirange(self):
+
         '''Get position of shadow than feature
 
         :returns: position of shadow than building (tuple of 2 str)
@@ -279,8 +284,9 @@ class ShadowPosition:
             aziranges = [[5,85,"LEFT", "DOWN"],[85,95,"LEFT","CENTRE"],[95,175,"LEFT","UP"],[175,185,"CENTRE","UP"],[185,265,"RIGHT","UP"],[265,275,"RIGHT","CENTRE"],[275,355,"RIGHT","DOWN"]]
             return ((azirange[2],azirange[3]) for azirange in aziranges if self.azimuth >= azirange[0] and self.azimuth <= azirange[1]).next()
 
+    #TODO thinking better implementation, this method is not logically related with class
     def operator(self):
-        #TODO thinking better implementation, this method is not logically related with class
+
         '''Get operator for if statemant of WindowsMaker class
 
         :returns: operator functions (tuple of 2 functions)
@@ -320,6 +326,7 @@ class ShadowPosition:
 
 
 def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='', resize=0):
+
     '''Function to assign right shadows to buildings using the azimuth calculated from the raster acquisition date and time.\
     Build new dataset (or shapefile if outputShape argument declared) with field ShadowID and Height related to   \
     the id of relative shadow fileshape and the height of building calculated with sensum.ShadowPosition \
@@ -423,10 +430,12 @@ def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='
     return outDS
 
 class CircleDensity(object):
+
     '''Circle Builder, circle maked with cendroid point
     '''
 
     def __init__(self,centroid,radius):
+        
         '''
         :param centroid: centroid point (ogr.wkbPoint)
         :param radius: radius of circle expressed in coordinates as unit of measure (float)
@@ -435,14 +444,15 @@ class CircleDensity(object):
         self.radius = radius
         
     def add(self):
+
         '''
         :returns: geometry of polygon (ogr.Geometry)
         '''
         circle = self.centroid.Buffer(self.radius,40)
         return circle
 
+def density(buildingShape,radius,outputShape=''):
 
-def density(buildingShape,radius,outputShape):
     '''Function for assign density value into each building.                                                             \
     Build new dataset (or shapefile if outputShape argument declared) with field N_Building and Density which contains   \
     respectively the number of building into the expressed radius and density parameter expressed in number of building  \
@@ -454,20 +464,20 @@ def density(buildingShape,radius,outputShape):
     :returns: Dataset of new features assigned (ogr.Dataset)
     '''
     #get layers
-    driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
+    driver = ogr.GetDriverByName("ESRI Shapefile")
     buildingsDS = driver.Open(buildingShape)
     buildingsLayer = buildingsDS.GetLayer()
     buindingsFeaturesCount = buildingsLayer.GetFeatureCount()
     if outputShape == '':
-        driver = osgeo.ogr.GetDriverByName("Memory")
+        driver = ogr.GetDriverByName("Memory")
     outDS = driver.CreateDataSource(outputShape)
     #copy the buildings layer and use it as output layer
     outDS.CopyLayer(buildingsLayer,"")
     outLayer = outDS.GetLayer()
     #add fields 'Density' to outLayer
-    fldDef = osgeo.ogr.FieldDefn('N_Building', osgeo.ogr.OFTInteger)
+    fldDef = ogr.FieldDefn('N_Building', ogr.OFTInteger)
     outLayer.CreateField(fldDef)
-    fldDef = osgeo.ogr.FieldDefn('Density', osgeo.ogr.OFTReal)
+    fldDef = ogr.FieldDefn('Density', ogr.OFTReal)
     outLayer.CreateField(fldDef)
     #loop into building features goint to make a window around each features and taking how many buildings are there around
     for i in range(buindingsFeaturesCount):
@@ -480,26 +490,19 @@ def density(buildingShape,radius,outputShape):
         area = radius**2 * math.pi
         spatialDS = maker.get_shapeDS(buildingsLayer)
         spatialLayer = spatialDS.GetLayer()
-        spatialFeature = spatialLayer.GetNextFeature()
-        sum_area = 0.0
-        while spatialFeature:
-            area_ft = spatialFeature.GetField("Area")
-            sum_area = area_ft + sum_area
-            spatialFeature = spatialLayer.GetNextFeature()
         spatialLayerFeatureCount = spatialLayer.GetFeatureCount() -1 #(-1) for remove itself
         outFeature = outLayer.GetFeature(i)
         outFeature.SetField("N_Building",spatialLayerFeatureCount)
         if spatialLayerFeatureCount:
-            #outFeature.SetField("Density",float(spatialLayerFeatureCount/area))
-            outFeature.SetField("Density",float(sum_area/area))
+            outFeature.SetField("Density",float(spatialLayerFeatureCount/area))
         else:
             outFeature.SetField("Density",0)
         outLayer.SetFeature(outFeature)
     return outDS
 
-
+#TODO need to check if pixelWidth and pixelHeight are necessary since if we know the coordinate system from shape we know the value of dimension in meter
 def height(shadowShape,pixelWidth,pixelHeight,outShape=''):
-    #TODO need to check if pixelWidth and pixelHeight are necessary since if we know the coordinate system from shape we know the value of dimension in meter
+    
     '''Function for calculate and assign to shadows shapefile the height of building and length of shadow.            \
     Build new dataset (or shapefile if outputShape argument declared) with field Shadow_Len and Height which contains \
     respectively the height of relative building and the length of the shadow                                         \
@@ -510,14 +513,14 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape=''):
     :param outputShape: path of output shapefile (char)
     :returns: Dataset of new features assigned (ogr.Dataset)
     '''
-    driver = ogr.GetDriverByName("ESRI Shapefile")
+    driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
     shadowDS = driver.Open(shadowShape)
     pixelWidth = pixelWidth
     pixelHeight = pixelWidth
     shadowLayer = shadowDS.GetLayer()
     shadowFeaturesCount = shadowLayer.GetFeatureCount()
     if outShape == '':
-        driver = ogr.GetDriverByName("Memory")
+        driver = osgeo.ogr.GetDriverByName("Memory")
     outDS = driver.CreateDataSource(outShape)
     outDS.CopyLayer(shadowLayer,"Shadows")
     outLayer = outDS.GetLayer()
@@ -561,3 +564,11 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape=''):
         outFeature.SetField('Height',buildingHeight)
         outLayer.SetFeature(outFeature)
     return outDS
+
+if __name__ == "__main__":
+    if os.path.isfile("/home/gale/Izmir/final_building/tmp.shp"):
+        os.remove("/home/gale/Izmir/final_building/tmp.shp")
+    if os.path.isfile("/home/gale/Izmir/final_building/prova.shp"):
+        os.remove("/home/gale/Izmir/final_building/prova.shp")
+    height("/home/gale/Izmir/final_building/shadows.shp",0.5,0.5,outShape='/home/gale/Izmir/final_building/tmp.shp')
+    #shadow_checker("/home/gale/Izmir/final_building/pan_class_6.shp","/home/gale/Izmir/final_building/tmp.shp",'2012/8/11 7:35:00', outputShape="/home/gale/Izmir/final_building/prova.shp", idfield="ID", resize=1)

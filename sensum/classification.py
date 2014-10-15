@@ -40,9 +40,7 @@ License: This file is part of SensumTools.
 '''
 
 import os,sys
-sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-os.environ["PATH"] = os.environ["PATH"] + ";C:\\OSGeo4W64\\bin"
+import config
 import numpy as np
 import scipy.stats
 import osgeo.gdal
@@ -51,10 +49,8 @@ import shutil
 import cv2
 import xml.etree.cElementTree as ET
 import otbApplication
-from sensum.conversion import *
+from conversion import *
 import time
-from sklearn import tree
-from sklearn.ensemble import GradientBoostingClassifier
 import operator
 
 if os.name == 'posix':
@@ -128,7 +124,6 @@ def unsupervised_classification_opencv(input_band_list,n_classes,n_iterations):
     
     return output_array
     
-    
 def train_classifier_otb(input_raster_list,input_shape_list,output_txt,classification_type,training_field):
     
     '''Training of the desired classifier using OTB library
@@ -196,7 +191,6 @@ def train_classifier_otb(input_raster_list,input_shape_list,output_txt,classific
     
     # The following line execute the application 
     TrainImagesClassifier.ExecuteAndWriteOutput()
- 
 
 def supervised_classification_otb(input_raster,input_txt,output_raster):
     
@@ -637,3 +631,4 @@ def reclassify_raster(input_band,*operations):
     for i in range(len(operations)):
         output_band = np.where(logic_list[i] != 1, output_band,output_band_list[i])
     return output_band
+

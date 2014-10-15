@@ -38,12 +38,9 @@ License: This file is part of SensumTools.
     along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
-
+import config
 import os
-import sys,os
-sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
+import sys
 import osgeo.gdal, gdal
 from gdalconst import *
 import numpy as np
@@ -55,8 +52,8 @@ import shutil
 import glob
 import collections
 from operator import itemgetter
-from sensum.conversion import *
-from sensum.segmentation import *
+from conversion import *
+from segmentation import *
 
 if os.name == 'posix':
     separator = '/'
@@ -413,7 +410,7 @@ def optimizer(parameters,segmentation_name,patches_list,reference_band_list,patc
     Last modified: 25/03/2014
     '''
     
-    print segmentation_name,parameters
+    #print segmentation_name,parameters
     path = os.getcwd() #working path used to save temp files
     sum_eval_criteria = 0
     
@@ -429,7 +426,7 @@ def optimizer(parameters,segmentation_name,patches_list,reference_band_list,patc
             rows,cols = patches_list[i][0].shape
             write_image(patches_list[i],np.uint16,0,path + separator + 'temp.tif',rows,cols,patches_geo_transform_list[i],projection)
             if os.path.isfile(path + separator + 'temp.tif'):
-                print 'working...'
+                #print 'working...'
                 if segmentation_name == 'Edison':
                     edison_otb(path + separator + 'temp.tif','raster',path + separator + 'temp_seg.tif',int(round(parameters[0])),float(parameters[1]),0,0)
                     seg_list = read_image(path + separator + 'temp_seg.tif',np.uint16,0)
@@ -480,7 +477,7 @@ def call_optimizer(segmentation_name,patches_list,reference_band_list,patches_ge
     
     opt_list = []
     fun_values = []
-    print nloops
+    print "nloops: ".format(nloops)
     for x in range(nloops):
         mybounds,parameters,ep = bound_generator(segmentation_name)
         ind = len(parameters)

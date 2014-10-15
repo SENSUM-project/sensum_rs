@@ -38,16 +38,12 @@ License: This file is part of SensumTools.
     along with SensumTools.  If not, see <http://www.gnu.org/licenses/>.
 ---------------------------------------------------------------------------------
 '''
-
+import config
 import multiprocessing
 import sys
 import time
 import os,sys
-'''
-sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
-sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
-os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
-'''
+
 class Multi(object):
     
     
@@ -60,7 +56,7 @@ class Multi(object):
             self.num_consumers = num_consumers
         else:
             self.num_consumers = multiprocessing.cpu_count() * 2
-        print 'Creating %d consumers' % self.num_consumers
+        #print 'Creating %d consumers' % self.num_consumers
         consumers = [ Consumer(self.tasks, self.results)
                       for i in xrange(self.num_consumers) ]
         for w in consumers:
@@ -94,11 +90,50 @@ class Consumer(multiprocessing.Process):
             next_task = self.task_queue.get()
             if next_task is None:
                 # Poison pill means shutdown
-                print '%s: Exiting' % proc_name
+                #print '%s: Exiting' % proc_name
                 self.task_queue.task_done()
                 break
-            print '%s: %s' % (proc_name, next_task)
+            #print '%s: %s' % (proc_name, next_task)
             answer = next_task()
             self.task_queue.task_done()
             self.result_queue.put(answer)
         return
+
+'''
+################################################################################
+                                    EXAMPLE
+################################################################################
+'''
+
+
+if __name__ == '__main__':
+
+    class Task(object):
+        def __init__(self, a, b):
+            self.a = a
+            self.b = b
+        def __call__(self):
+            time.sleep(1) # pretend to take some time to do the work
+            return self.a*self.b
+        def __str__(self):
+            return str(self.a*self.b)
+
+    import sys
+    sys.path.append('C:/OSGeo4W/apps/Python27/Lib/site-packages')
+
+    new_proc = Multi()
+
+    n_jobs = 10
+
+    for i in xrange(n_jobs):
+        new_proc.put(Task(i,i))
+
+    new_proc.kill()
+
+    
+    # Start printing results
+    while n_jobs:
+        result = new_proc.result()
+        print 'Result:', result
+        n_jobs -= 1
+        
