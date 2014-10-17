@@ -1,4 +1,5 @@
 #!/usr/bin/python
+import config
 import os,sys
 import shutil
 import time
@@ -9,6 +10,10 @@ from osgeo.gdalconst import *
 import numpy as np
 import math
 import argparse
+import warnings
+from utils import Bar
+
+sys.path.append(os.path.split(os.path.dirname(os.path.abspath(__file__)))[0])
 from sensum_library.preprocess import *
 from sensum_library.classification import *
 from sensum_library.segmentation import *
@@ -17,7 +22,39 @@ from sensum_library.segmentation_opt import *
 from sensum_library.features import *
 from sensum_library.secondary_indicators import *
 
-def height(shadowShape,pixelWidth,pixelHeight,outShape='',ui_progress=None):
+def main():
+    warnings.filterwarnings("ignore")
+    arg = args()
+    input_shadow = str(arg.input_shadow)
+    input_buildings = str(arg.input_buildings)
+    date = str(arg.date)
+    output_shape = str(arg.output_shape)
+    idfield = str(arg.idfield)
+    window_resize = float(arg.window_resize)
+    print input_shadow, input_buildings, date, output_shape, idfield, window_resize
+    if os.path.isfile(output_shape): os.remove(output_shape)
+    if os.path.isfile(input_shadow[:-4]+'_temp.shp'): os.remove(input_shadow[:-4]+'_temp.shp')
+    #tmp_shadow_processed = tempfile.mkstemp()[1]
+    #os.remove(tmp_shadow_processed)
+    #height(input_shadow, 0.5, 0.5, date, tmp_shadow_processed)
+    height(input_shadow, 0.5, 0.5, date, input_shadow[:-4]+'_temp.shp')
+    #shadow_checker(input_buildings, tmp_shadow_processed, date, idfield=idfield, outputShape=output_shape, resize=window_resize)
+    shadow_checker(input_buildings, input_shadow[:-4]+'_temp.shp', date, idfield=idfield, outputShape=output_shape, resize=window_resize)
+    #shutil.rmtree(tmp_shadow_processed)
+    os.remove(input_shadow[:-4]+'_temp.shp')
+
+def args():
+    parser = argparse.ArgumentParser(description='Calculate Height')
+    parser.add_argument("input_shadow", help="????")
+    parser.add_argument("input_buildings", help="????")
+    parser.add_argument("date", help="????")
+    parser.add_argument("output_shape", help="????")
+    parser.add_argument("idfield", help="????")
+    parser.add_argument("window_resize", help="????")
+    args = parser.parse_args()
+    return args
+
+def height(shadowShape, pixelWidth, pixelHeight, date, outShape=''):
     
     '''Function for calculate and assign to shadows shapefile the height of building and length of shadow.            \
     Build new dataset (or shapefile if outputShape argument declared) with field Shadow_Len and Height which contains \
@@ -31,8 +68,6 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape='',ui_progress=None):
     '''
     driver = osgeo.ogr.GetDriverByName("ESRI Shapefile")
     shadowDS = driver.Open(shadowShape)
-    pixelWidth = pixelWidth
-    pixelHeight = pixelWidth
     shadowLayer = shadowDS.GetLayer()
     shadowFeaturesCount = shadowLayer.GetFeatureCount()
     if outShape == '':
@@ -44,10 +79,9 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape='',ui_progress=None):
     height_def = osgeo.ogr.FieldDefn('Height',osgeo.ogr.OFTReal)
     outLayer.CreateField(shadow_def)
     outLayer.CreateField(height_def)
-    if ui_progress:
-        ui_progress.progressBar.setMinimum(1)
-        ui_progress.progressBar.setMaximum(shadowFeaturesCount)
-    for i in range(0,shadowFeaturesCount):
+    status = Bar(shadowFeaturesCount, "1/2 Computing length of shadows.")
+    for i in range(shadowFeaturesCount):
+        status(i+1)
         #Convert Shape to Raster
         shadowFeature = shadowLayer.GetFeature(i)
         x_min, x_max, y_min, y_max = WindowsMaker(shadowFeature).make_coordinates()
@@ -57,7 +91,6 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape='',ui_progress=None):
         rasterDS.SetGeoTransform((x_min, pixelWidth, 0,y_max, 0, -pixelHeight))
         rasterDS.SetProjection(shadowLayer.GetSpatialRef().ExportToWkt())
         gdal.RasterizeLayer(rasterDS,[1], shadowLayer,burn_values=[1])
-
         #Make Band List
         inband = rasterDS.GetRasterBand(1) 
         band_list = inband.ReadAsArray().astype(np.uint16)
@@ -74,20 +107,18 @@ def height(shadowShape,pixelWidth,pixelHeight,outShape='',ui_progress=None):
         northing = geo_transform[3]
         a = utm2wgs84(easting, northing, zone)
         lon,lat = a[0],a[1]
-        #lat,lon = northing, easting
-        shadowLen = shadow_length(band_list,lat,lon,'2012/8/11 9:35:00')
-        buildingHeight = building_height(lat,lon,'2012/8/11 9:35:00',shadowLen)
-        print "buildingHeight: {}\nshadowLen: {}".format(buildingHeight,shadowLen)
+        shadowLen = shadow_length(band_list,lat,lon,date)
+        buildingHeight = building_height(lat,lon,date,shadowLen)
         #insert value to init shape
         outFeature = outLayer.GetFeature(i)
         outFeature.SetField('Shadow_Len',int(shadowLen))
         outFeature.SetField('Height',buildingHeight)
         outLayer.SetFeature(outFeature)
-        if ui_progress:
-            ui_progress.progressBar.setValue(ui_progress.progressBar.value()+1)
+
+    shadowDS.Destroy()
     return outDS
 
-def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='', resize=0, ui_progress=None):
+def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='', resize=0):
 
     '''Function to assign right shadows to buildings using the azimuth calculated from the raster acquisition date and time.\
     Build new dataset (or shapefile if outputShape argument declared) with field ShadowID and Height related to   \
@@ -103,6 +134,7 @@ def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='
     :returns: Dataset of new features assigned (ogr.Dataset)
     '''
     #get layers
+    print outputShape
     driver = ogr.GetDriverByName("ESRI Shapefile")
     buildingsDS = driver.Open(buildingShape)
     buildingsLayer = buildingsDS.GetLayer()
@@ -113,7 +145,7 @@ def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='
         driver = ogr.GetDriverByName("Memory")
     outDS = driver.CreateDataSource(outputShape)
     #copy the buildings layer and use it as output layer
-    outDS.CopyLayer(buildingsLayer,"")
+    outDS.CopyLayer(buildingsLayer,"Buildings")
     outLayer = outDS.GetLayer()
     #add fields 'ShadowID' and 'Height' to outLayer
     fldDef = ogr.FieldDefn('ShadowID', ogr.OFTInteger)
@@ -133,13 +165,10 @@ def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='
     position = ShadowPosition(date,latitude=latitude,longitude=longitude)
     position.main()
     xOperator, yOperator = position.operator()
-    if ui_progress:
-        ui_progress.progressBar.setValue(1)
-        ui_progress.progressBar.setMinimum(1)
-        ui_progress.progressBar.setMaximum(buindingsFeaturesCount)
     #loop into building features goint to make a window around each features and taking only shadow features there are into the window. 
+    status = Bar(buindingsFeaturesCount, "2/2 Calculating heights.")
     for i in range(buindingsFeaturesCount):
-        print "{} di {} features".format(i+1,buindingsFeaturesCount)
+        status(i+1)
         buildingFeature = outLayer.GetFeature(i)
         #make a spatial layer and get the layer
         maker = WindowsMaker(buildingFeature,resize)
@@ -193,36 +222,9 @@ def shadow_checker(buildingShape, shadowShape, date, idfield="ID", outputShape='
                     outFeature.SetField("Height",field)
                     outLayer.SetFeature(outFeature)
                     spatialFeature = spatialLayer.GetNextFeature()
-        if ui_progress:
-            ui_progress.progressBar.setValue(ui_progress.progressBar.value()+1)
+    buildingsDS.Destroy()
+    shadowDS.Destroy()
     return outDS
-
-def args():
-    parser = argparse.ArgumentParser(description='Height Calculate')
-    parser.add_argument("input_shadow", help="echo the string you use here")
-    parser.add_argument("input_buildings", help="echo the string you use here")
-    parser.add_argument("date", help="echo the string you use here")
-    parser.add_argument("output_shape", help="echo the string you use here")
-    parser.add_argument("idfield", help="echo the string you use here")
-    parser.add_argument("window_resize", help="echo the string you use here")
-    args = parser.parse_args()
-    return args
-
-def main():
-    arg = args()
-    input_shadow = str(arg.input_shadow)
-    input_buildings = str(arg.input_buildings)
-    date = str(arg.date)
-    output_shape = str(arg.output_shape)
-    idfield = str(arg.idfield)
-    window_resize = float(arg.window_resize)
-    if os.path.isfile(output_shape):
-        os.remove(output_shape)
-    tmp_shadow_processed = tempfile.mkstemp()[1]
-    os.remove(tmp_shadow_processed)
-    height(input_shadow,0.5,0.5,outShape=tmp_shadow_processed)
-    shadow_checker(input_buildings,tmp_shadow_processed, date, outputShape=output_shape, idfield=idfield, resize=window_resize)
-    shutil.rmtree(tmp_shadow_processed)
 
 if __name__ == "__main__":
     main()
