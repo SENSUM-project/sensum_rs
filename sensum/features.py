@@ -44,6 +44,8 @@ import os
 import numpy as np
 import scipy.stats
 import os,sys
+import collections
+from operator import itemgetter, attrgetter
 sys.path.append("C:\\OSGeo4W64\\apps\\Python27\\Lib\\site-packages")
 sys.path.append("C:\\OSGeo4W64\\apps\\orfeotoolbox\\python")
 os.environ["PATH"] = os.environ["PATH"] + "C:\\OSGeo4W64\\bin"
@@ -585,8 +587,8 @@ def value_to_segments(input_raster,input_shape,output_shape,operation = 'Mode'):
     #TODO: this is only a spatial union operation, isn't it? So it is not part of the hybrid approach where you aggregate pixel classes to segments!?
     rows,cols,nbands,geotransform,projection = read_image_parameters(input_raster) 
     band_list_class = read_image(input_raster,np.int32,0) #read original raster file
-    shp2rast(input_shape,input_shape[:-4]+'.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
-    band_list_seg = read_image(input_shape[:-4]+'.TIF',np.int32,0) #read segmentation raster file
+    shp2rast(input_shape,input_shape[:-4]+'_conv.TIF',rows,cols,'DN',0,0,0,0,0,0) #conversion of the segmentation results from shape to raster for further processing
+    band_list_seg = read_image(input_shape[:-4]+'_conv.TIF',np.int32,0) #read segmentation raster file
     
     driver_shape=osgeo.ogr.GetDriverByName('ESRI Shapefile')
     infile=driver_shape.Open(input_shape)
@@ -608,7 +610,8 @@ def value_to_segments(input_raster,input_shape,output_shape,operation = 'Mode'):
     n_feature = inlayer.GetFeatureCount()
     j = 1
     while infeature:
-        print str(j) + ' of ' + str(n_feature)
+        if j%50 == 0:
+            print str(j) + ' of ' + str(n_feature)
         j = j+1
         dn = infeature.GetField('DN')
         # get the input geometry
@@ -618,13 +621,15 @@ def value_to_segments(input_raster,input_shape,output_shape,operation = 'Mode'):
         outfeature = osgeo.ogr.Feature(feature_def)
         # set the geometry and attribute
         outfeature.SetGeometry(geom)
-        seg_pos = np.where(band_list_seg[0] == dn) #returns a list of x and y coordinates related to the pixels satisfying the given condition
-        mat_pos = np.zeros(len(seg_pos[0]))
+        #seg_pos = np.where(band_list_seg[0] == dn) #returns a list of x and y coordinates related to the pixels satisfying the given condition
+        #mat_pos = np.zeros(len(seg_pos[0]))
+        mask = np.equal(band_list_seg[0],dn)
         
         #Extract all the pixels inside a segment
         for b in range(0,len(band_list_class)):
-            for l in range(0,len(seg_pos[0])):
-                mat_pos[l] = band_list_class[b][seg_pos[0][l]][seg_pos[1][l]]
+            mat_pos = np.extract(mask,band_list_class[b])
+            #for l in range(0,len(seg_pos[0])):
+                #mat_pos[l] = band_list_class[b][seg_pos[0][l]][seg_pos[1][l]]
             if operation == 'Mode':
                 mode_ar = scipy.stats.mode(mat_pos)
                 value = mode_ar[0][0]
@@ -678,4 +683,50 @@ def get_class(target_layer):
     index3 = (urban_classes_tmp[i] for i,disimmilarity3_sum in enumerate(dissimilarity3_sums) if disimmilarity3_sum == max(dissimilarity3_sums)).next()
     index_list = [index1,index2,index3]
     return max(set(index_list), key=index_list.count)
+
+
+def tile_statistics(band_mat,start_col_coord,start_row_coord,end_col_coord,end_row_coord):
+
+    '''
+    Compute statistics related to the input tile
+
+    :param band_mat: numpy 8 bit array containing the extracted tile
+    :param start_col_coord: starting longitude coordinate
+    :param start_row_coord: starting latitude coordinate
+    :param end_col_coord: ending longitude coordinate
+    :param end_row_coord: ending latitude coordinate
+
+    :returns: a list of statistics (start_col_coord,start_row_coord,end_col_coord,end_row_coord,confidence, min frequency value, max frequency value, standard deviation value, distance among frequent values)
+
+    Author: Daniele De Vecchi
+    Last modified: 22/08/2014
+    '''
+
+    #Histogram definition
+    data_flat = band_mat.flatten()
+    data_counter = collections.Counter(data_flat)
+    data_common = (data_counter.most_common(20)) #20 most common values
+    data_common_sorted = sorted(data_common,key=itemgetter(0)) #reverse=True for inverse order
+    hist_value = [elt for elt,count in data_common_sorted]
+    hist_count = [count for elt,count in data_common_sorted]
+
+    #Define the level of confidence according to the computed statistics 
+    min_value = hist_value[0]
+    max_value = hist_value[-1]
+    std_value = np.std(hist_count)
+    diff_value = max_value - min_value
+    min_value_count = hist_count[0]
+    max_value_count = hist_count[-1] 
+    tot_count = np.sum(hist_count)
+    min_value_freq = (float(min_value_count) / float(tot_count)) * 100
+    max_value_freq = (float(max_value_count) / float(tot_count)) * 100
+
+    if max_value_freq > 20.0 or min_value_freq > 20.0 or diff_value < 18 or std_value > 100000:
+        confidence = 0
+    elif max_value_freq > 5.0: #or std_value < 5.5: #or min_value_freq > 5.0:
+        confidence = 0.5
+    else:
+        confidence = 1
+
+    return (start_col_coord,start_row_coord,end_col_coord,end_row_coord,confidence,min_value_freq,max_value_freq,std_value,diff_value)
 

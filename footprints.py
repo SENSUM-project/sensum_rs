@@ -42,7 +42,7 @@ def args():
     parser.add_argument("training_attribute", help="????")
     parser.add_argument("output_shape", help="????")
     parser.add_argument("-c", "--classes", nargs="+", help="????")
-    parser.add_argument("--optimazer", default=False, const=True, nargs='?', help="????")
+    parser.add_argument("--optimizer", default=False, const=True, nargs='?', help="????")
     args = parser.parse_args()
     return args
 
