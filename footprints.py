@@ -31,7 +31,7 @@ def main():
     training_attribute = str(arg.training_attribute)
     building_classes = map(int, arg.classes)
     output_shape = str(arg.output_shape)
-    enable_smooth_filter = arg.optimazer
+    enable_smooth_filter = arg.optimizer
     print pansharp_file,training_set,training_attribute,building_classes,output_shape,enable_smooth_filter
     footprints(pansharp_file,training_set,training_attribute,building_classes,output_shape,enable_smooth_filter=enable_smooth_filter)
 
@@ -83,7 +83,7 @@ def footprints(pansharp_file,training_set,training_attribute,building_classes,ou
         geom = infeature.GetGeometryRef()
         area = geom.Area()
         dn = infeature.GetField('DN')
-        if dn in building_classes and area > 25 and area < 6000 :
+        if dn in building_classes and area > 25 and area < 7500 :
             outfeature = osgeo.ogr.Feature(feature_def)
             outfeature.SetGeometry(geom)
             outfeature.SetField('DN',dn)
